@@ -127,9 +127,11 @@ def build(out: Path):
     (out / ".nojekyll").write_text("")
     (out / ".github/workflows").mkdir(parents=True)
     (out / ".github/workflows/pages.yml").write_text(WORKFLOW)
-    # publish only when the set of closed trades changes (or the page / workflow changes)
+    # push whenever anything changed (candles, closed trades, balance); run timestamps excluded
     h = hashlib.sha256()
-    h.update(json.dumps(sorted(str(t["id"]) for t in closed)).encode())
+    for name in sorted(files):
+        obj = dict(files[name]); obj.pop("feed_time", None); obj.pop("updated_at", None)
+        h.update(name.encode()); h.update(json.dumps(obj, sort_keys=True).encode())
     h.update((HERE / "site/index.html").read_bytes()); h.update(WORKFLOW.encode())
     return h.hexdigest()
 

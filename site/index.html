@@ -515,7 +515,7 @@ function stream() {
     const at = d.updated_at || d.feed_time;
     const thai = (x) => new Date(x * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
     $("status").className = "ok";
-    $("status").textContent = `อัปเดตเมื่อมีไม้ปิด · ล่าสุด ${thai(at)} น. เวลาไทย`;
+    $("status").textContent = `อัปเดตทุก 2 นาที · ล่าสุด ${thai(at)} น. เวลาไทย`;
     if (d.account) $("acct").textContent = `Exness · Demo · Balance ${d.account.balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     if (!sym) return;
     const cur = d.series[`${sym}|${tf}`];

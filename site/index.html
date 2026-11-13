@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pheeet · Trade Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  /* Pheeet trade terminal tokens (dark-only): near-black canvas, teal for buy/profit, red for sell/loss. */
+  :root {
+    --background: oklch(0.145 0.008 255);
+    --foreground: oklch(0.94 0.006 250);
+    --card: oklch(0.18 0.01 255);
+    --primary: oklch(0.74 0.12 178);
+    --primary-foreground: oklch(0.15 0.03 178);
+    --muted-foreground: oklch(0.63 0.015 255);
+    --accent: oklch(0.24 0.014 255);
+    --border: oklch(0.26 0.012 255);
+    --profit: oklch(0.74 0.13 175);
+    --loss: oklch(0.64 0.19 25);
+    --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; border-color: var(--border); }
+  body {
+    margin: 0; height: 100dvh; overflow: hidden; display: flex; flex-direction: column;
+    background: var(--background); color: var(--foreground); font-family: var(--font-display);
+  }
+  .mono { font-family: var(--font-mono); }
+
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .brand { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+  .divider { width: 1px; height: 16px; background: var(--border); }
+  #sym {
+    appearance: none; background: transparent; color: var(--foreground); border: 0; padding: 2px 16px 2px 0;
+    font: 500 14px var(--font-mono); cursor: pointer;
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%), linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+    background-position: right 5px center, right 1px center; background-size: 4px 4px; background-repeat: no-repeat;
+  }
+  #sym:focus-visible { outline: 1px solid var(--primary); border-radius: 4px; }
+  #sym option { background: var(--card); }
+  #price { font: 14px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+  #price.up { color: var(--profit); }
+  #price.down { color: var(--loss); }
+
+  .account { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: color-mix(in oklch, var(--primary) 15%, transparent); color: var(--primary); font-weight: 600; font-size: 14px;
+  }
+  .who { display: flex; flex-direction: column; line-height: 1.25; }
+  .who .acct { font-size: 12px; font-weight: 500; }
+  #status { font: 10px var(--font-mono); color: var(--muted-foreground); display: flex; align-items: center; gap: 5px; }
+  #status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--muted-foreground); }
+  #status.ok::before { background: var(--profit); }
+  #status.stale::before { background: var(--loss); }
+
+  .toolbar { display: flex; align-items: center; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .tf {
+    border: 0; border-radius: 2px; padding: 4px 10px; background: transparent; color: var(--muted-foreground);
+    font: 500 12px var(--font-mono); cursor: pointer; transition: background-color .15s, color .15s;
+  }
+  .tf:hover { background: var(--accent); color: var(--foreground); }
+  .tf[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
+  .tf:focus-visible { outline: 1px solid var(--primary); outline-offset: 1px; }
+  .ai-btn {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in oklch, var(--primary) 45%, transparent);
+    border-radius: 4px; padding: 4px 12px; background: color-mix(in oklch, var(--primary) 12%, transparent); color: var(--primary);
+    font: 600 12px var(--font-display); cursor: pointer; transition: background-color .15s;
+  }
+  .ai-btn:hover { background: color-mix(in oklch, var(--primary) 22%, transparent); }
+  .ai-btn:disabled { opacity: .6; cursor: progress; }
+  .ai-btn.go { margin-left: 0; background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  .ai-btn.go:hover { background: color-mix(in oklch, var(--primary) 85%, white); }
+  .ai-btn.rev { border-color: #3d5a80; background: color-mix(in oklch, #4c8dff 12%, transparent); color: #9cc0ff; }
+  .t-pend { font: 600 9px var(--font-mono); letter-spacing: 0.08em; padding: 1px 5px; border-radius: 2px; background: color-mix(in oklch, #e0b44c 18%, transparent); color: #e0b44c; }
+  .order { border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; line-height: 1.5; border: 1px solid var(--border); }
+  .order.ok { border-color: color-mix(in oklch, var(--primary) 50%, transparent); background: color-mix(in oklch, var(--primary) 10%, transparent); }
+  .order.no { border-color: color-mix(in oklch, var(--loss) 50%, transparent); background: color-mix(in oklch, var(--loss) 8%, transparent); }
+  .order b { font-family: var(--font-mono); }
+  .pend { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  .cancel-btn { margin-top: 12px; width: 100%; border: 1px solid color-mix(in oklch, var(--loss) 50%, transparent); background: transparent; color: var(--loss); border-radius: 6px; padding: 8px; font: 600 13px var(--font-display); cursor: pointer; }
+  .cancel-btn:hover { background: color-mix(in oklch, var(--loss) 12%, transparent); }
+  .ai-btn:focus-visible { outline: 1px solid var(--primary); outline-offset: 1px; }
+
+  .tabs { display: flex; gap: 2px; }
+  .tab { border: 0; background: transparent; color: var(--muted-foreground); font: 600 13px var(--font-display); white-space: nowrap; padding: 0 8px 0 0; cursor: pointer; letter-spacing: 0.02em; }
+  .tab + .tab { padding-left: 10px; border-left: 1px solid var(--border); }
+  .tab[aria-selected="true"] { color: var(--foreground); }
+  .tab:focus-visible { outline: 1px solid var(--primary); border-radius: 2px; }
+  #ai { flex: 1; min-height: 0; overflow-y: auto; display: block; padding: 14px 16px 24px; }
+  #ai-dlg { width: min(720px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 32px)); }
+  .ai-meta { font: 11px var(--font-mono); color: var(--muted-foreground); margin-bottom: 10px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .ai-meta .warn { color: var(--loss); }
+  .card { background: var(--background); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  .card.hot { border-color: #3d5a80; }
+  .vhead { display: flex; align-items: center; gap: 8px; }
+  .vchip { font: 600 13px var(--font-mono); letter-spacing: .04em; padding: 3px 10px; border-radius: 4px; }
+  .vchip.buy, .vchip.hold { background: color-mix(in oklch, var(--profit) 18%, transparent); color: var(--profit); }
+  .vchip.sell, .vchip.exit { background: color-mix(in oklch, var(--loss) 18%, transparent); color: var(--loss); }
+  .vchip.wait { background: var(--accent); color: var(--foreground); }
+  .vchip.caution { background: color-mix(in oklch, #f2c94c 18%, transparent); color: #f2c94c; }
+  .muted { color: var(--muted-foreground); font-size: 11px; }
+  .vline { margin: 8px 0 10px; font-size: 14px; line-height: 1.5; }
+  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font: 13px var(--font-mono); }
+  .keys .muted { font-family: var(--font-display); }
+  .sq { display: inline-block; width: 8px; height: 8px; border-radius: 1px; margin-right: 4px; }
+  .note { margin-top: 8px; padding: 6px 8px; border-radius: 4px; font-size: 12px; line-height: 1.5; }
+  .note.ok { background: color-mix(in oklch, var(--primary) 12%, transparent); color: var(--primary); }
+  .note.no { background: color-mix(in oklch, var(--loss) 12%, transparent); color: var(--loss); }
+  .note.warn { background: color-mix(in oklch, #f08a3c 14%, transparent); color: #f5b97a; }
+  .note.wait { background: var(--accent); color: var(--foreground); }
+  details.more { margin-top: 8px; font-size: 12px; color: var(--muted-foreground); }
+  details.more summary { cursor: pointer; }
+  details.more p { margin: 6px 0 0; line-height: 1.55; color: color-mix(in oklch, var(--foreground) 85%, transparent); }
+  .r4 { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 2px 8px; align-items: start; padding: 9px 0; border-top: 1px solid var(--border); cursor: pointer; }
+  .r4:first-child { border-top: 0; }
+  .r4 .n { font: 600 11px var(--font-mono); color: var(--primary); padding-top: 2px; }
+  .r4 .t { font-size: 13px; font-weight: 500; }
+  .r4 .h { grid-column: 2 / 4; font-size: 12px; color: var(--muted-foreground); line-height: 1.45; }
+  .r4 .tag { font: 600 11px var(--font-display); padding: 2px 8px; border-radius: 4px; white-space: nowrap; background: var(--accent); }
+  .r4 .tag.pos { background: color-mix(in oklch, var(--profit) 16%, transparent); }
+  .r4 .tag.neg { background: color-mix(in oklch, var(--loss) 16%, transparent); }
+  .r4 .det { display: none; grid-column: 2 / 4; font-size: 12px; line-height: 1.55; color: color-mix(in oklch, var(--foreground) 85%, transparent); margin-top: 4px; }
+  .r4.open .det { display: block; }
+  .r4 ul { margin: 4px 0 0; padding-left: 16px; } .r4 li { margin: 2px 0; }
+  .sub { font: 600 10px var(--font-mono); letter-spacing: .08em; color: var(--muted-foreground); margin-top: 8px; }
+  .zone { display: flex; gap: 8px; align-items: baseline; font-size: 12px; margin-top: 5px; }
+  .zone .px { font: 12px var(--font-mono); white-space: nowrap; }
+  .zone .st { font: 600 9px var(--font-mono); padding: 1px 5px; border-radius: 2px; background: var(--accent); white-space: nowrap; }
+  .rv3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+  .rv3 div { padding: 7px 8px; border-radius: 4px; font-size: 11.5px; line-height: 1.45; opacity: .55; }
+  .rv3 div.on { opacity: 1; outline: 1px solid currentColor; }
+  .rv3 b { font-weight: 600; display: block; }
+  .rv3 .hold { background: color-mix(in oklch, var(--profit) 12%, transparent); color: var(--profit); }
+  .rv3 .caution { background: color-mix(in oklch, #f2c94c 12%, transparent); color: #f2c94c; }
+  .rv3 .exit { background: color-mix(in oklch, var(--loss) 12%, transparent); color: var(--loss); }
+  .rv ul { margin: 8px 0 0; padding-left: 16px; font-size: 12px; line-height: 1.5; color: color-mix(in oklch, var(--foreground) 85%, transparent); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--muted-foreground); margin: 4px 0 12px; }
+  .legend i { display: inline-block; width: 16px; height: 0; vertical-align: middle; margin-right: 4px; border-top: 2px solid; }
+  .ai-foot { margin-top: 12px; font-size: 11px; color: var(--muted-foreground); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .ai-foot button { border: 1px solid var(--border); background: transparent; color: var(--muted-foreground); border-radius: 4px; padding: 3px 8px; font: 11px var(--font-display); cursor: pointer; }
+
+  .body { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+  .chartcol { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  main { position: relative; flex: 1; min-height: 0; }
+  #chart { position: absolute; inset: 0; }
+  #trade-legend {
+    position: absolute; left: 10px; top: 8px; z-index: 2; pointer-events: none;
+    font: 10px var(--font-mono); color: var(--muted-foreground);
+    background: color-mix(in oklch, var(--background) 82%, transparent);
+    padding: 3px 8px; border-radius: 4px;
+    max-width: calc(100% - 80px);
+  }
+
+
+
+  /* Profit Summary (compact, above Order History) */
+  .psum { flex-shrink: 0; padding: 12px 14px 12px; border-bottom: 1px solid var(--border); }
+  .psum-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .psum-head h2 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.02em; }
+  .psum-badge {
+    font: 600 10px var(--font-display); letter-spacing: 0.06em;
+    padding: 3px 8px; border-radius: 999px;
+    background: color-mix(in oklch, var(--profit) 16%, transparent);
+    color: var(--profit);
+  }
+  .psum-period {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin: 8px 0 10px; font-size: 12px; color: var(--muted-foreground);
+    position: relative;
+  }
+  .psum-dd { position: relative; }
+  .psum-dd-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    border: 0; background: transparent; color: var(--foreground);
+    font: 500 12px var(--font-display); cursor: pointer; padding: 2px 0 2px 6px;
+  }
+  .psum-dd-btn:hover { color: var(--profit); }
+  .psum-dd-btn:focus-visible { outline: 1px solid var(--primary); border-radius: 4px; }
+  .psum-dd-btn .chev {
+    width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 5px solid var(--muted-foreground); margin-top: 1px;
+  }
+  .psum-dd.open .psum-dd-btn .chev { transform: rotate(180deg); }
+  .psum-dd-menu {
+    display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 8;
+    min-width: 128px; padding: 4px; border-radius: 8px;
+    background: color-mix(in oklch, var(--card) 92%, black);
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+  }
+  .psum-dd.open .psum-dd-menu { display: block; }
+  .psum-dd-menu button {
+    display: block; width: 100%; text-align: left; border: 0; background: transparent;
+    color: var(--foreground); font: 500 12px var(--font-display);
+    padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .psum-dd-menu button:hover { background: var(--accent); }
+  .psum-dd-menu button[aria-selected="true"] { color: var(--profit); background: color-mix(in oklch, var(--primary) 12%, transparent); }
+  .psum-net {
+    border-radius: 12px; padding: 10px 14px 11px; margin-bottom: 8px;
+    background: color-mix(in oklch, var(--profit) 10%, var(--accent));
+  }
+  .psum-net.neg { background: color-mix(in oklch, var(--loss) 12%, var(--accent)); }
+  .psum-net.flat { background: color-mix(in oklch, var(--accent) 80%, transparent); }
+  .psum-net .lbl {
+    display: block; font: 500 10px var(--font-display); letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 2px;
+  }
+  .psum-net .val { font: 650 26px/1.15 var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+  .psum-net .val.pos { color: var(--profit); }
+  .psum-net .val.neg { color: var(--loss); }
+  .psum-split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .psum-side { border-radius: 12px; padding: 10px 12px 8px; min-width: 0; }
+  .psum-side.win { background: color-mix(in oklch, var(--profit) 10%, var(--accent)); }
+  .psum-side.lose { background: color-mix(in oklch, var(--loss) 12%, var(--accent)); }
+  .psum-side .kicker {
+    display: flex; align-items: center; gap: 5px;
+    font: 600 10px var(--font-display); letter-spacing: 0.08em; text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .psum-side.win .kicker { color: var(--profit); }
+  .psum-side.lose .kicker { color: var(--loss); }
+  .psum-side .kicker svg { width: 12px; height: 12px; flex-shrink: 0; }
+  .psum-side .amt { font: 650 20px/1.2 var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; margin-bottom: 8px; }
+  .psum-side.win .amt { color: var(--profit); }
+  .psum-side.lose .amt { color: var(--loss); }
+  .psum-side .rule { height: 1px; background: color-mix(in oklch, var(--foreground) 12%, transparent); margin: 0 0 7px; }
+  .psum-side .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted-foreground); }
+  .psum-side .foot b { font: 600 13px var(--font-display); font-variant-numeric: tabular-nums; color: var(--foreground); }
+  .psum-foot {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    margin: 10px 2px 0; font-size: 12px; color: var(--muted-foreground);
+  }
+  .psum-foot .metric { display: inline-flex; align-items: baseline; gap: 6px; }
+  .psum-foot .metric b { font: 650 14px var(--font-display); font-variant-numeric: tabular-nums; color: var(--foreground); }
+  .psum-bar { height: 4px; border-radius: 999px; background: color-mix(in oklch, var(--foreground) 10%, transparent); margin: 8px 0 0; overflow: hidden; }
+  .psum-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--profit); width: 0; transition: width .25s ease; }
+
+  aside { height: 45vh; flex-shrink: 0; display: flex; flex-direction: column; background: var(--card); border-top: 1px solid var(--border); min-height: 0; }
+  .aside-head { gap: 8px; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .aside-head h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
+  .aside-head .count { font: 11px var(--font-mono); color: var(--muted-foreground); white-space: nowrap; }
+  #trades { flex: 1; min-height: 0; overflow-y: auto; }
+  .trade {
+    display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 10px 16px; border: 0;
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+    background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; transition: background-color .15s, opacity .15s;
+  }
+  .trade:hover, .trade:focus-visible { background: color-mix(in oklch, var(--accent) 60%, transparent); outline: none; }
+  .trade.dim { opacity: .42; }
+  .trade.on { background: color-mix(in oklch, var(--primary) 16%, transparent); box-shadow: inset 3px 0 0 var(--primary); }
+  .aside-head .hint { display: block; margin-top: 2px; font-size: 10px; font-weight: 400; color: var(--muted-foreground); }
+  .bar { width: 4px; height: 38px; border-radius: 9999px; flex-shrink: 0; margin-top: 2px; }
+  .bg-buy { background: var(--profit); } .bg-sell { background: var(--loss); }
+  .t-main { flex: 1; min-width: 0; }
+  .t-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .t-sym { font: 500 14px var(--font-mono); }
+  .t-dir { font: 10px var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; }
+  .t-lots { font: 10px var(--font-mono); color: var(--muted-foreground); letter-spacing: 0.04em; }
+  .t-open { font: 600 9px var(--font-mono); letter-spacing: 0.08em; padding: 1px 5px; border-radius: 2px; background: color-mix(in oklch, var(--primary) 15%, transparent); color: var(--primary); }
+  .t-sub { display: block; margin-top: 3px; font-size: 11px; color: var(--muted-foreground); line-height: 1.45; }
+  .t-px { font-family: var(--font-mono); }
+  .t-net { flex-shrink: 0; font: 600 14px var(--font-mono); padding-top: 2px; }
+  .pos { color: var(--profit); } .neg { color: var(--loss); }
+  .empty { padding: 24px 16px; color: var(--muted-foreground); font-size: 13px; }
+
+  dialog {
+    width: min(1280px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 32px)); max-width: none; max-height: none;
+    padding: 0; overflow: hidden; flex-direction: column;
+    background: var(--card); color: var(--foreground); border: 1px solid var(--border); border-radius: 8px;
+  }
+  dialog[open] { display: flex; }
+  .d-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
+  .d-side { min-height: 0; overflow-y: auto; border-left: 1px solid var(--border); }
+  dialog::backdrop { background: rgb(0 0 0 / 0.7); }
+  .d-head { position: relative; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .d-head h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .d-head p { margin: 4px 0 0; font-size: 12px; color: var(--muted-foreground); }
+  .d-close {
+    position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border: 0; border-radius: 4px;
+    background: transparent; color: var(--muted-foreground); font-size: 18px; cursor: pointer;
+  }
+  .d-close:hover { background: var(--accent); color: var(--foreground); }
+  #rc-dlg { width: min(640px, calc(100vw - 32px)); height: auto; max-height: min(720px, calc(100dvh - 32px)); }
+  #rc-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 20px 16px; }
+  .rc-row { padding: 10px 0; border-bottom: 1px solid color-mix(in oklch, var(--border) 70%, transparent); font-size: 13px; line-height: 1.5; }
+  .rc-row:last-child { border-bottom: 0; }
+  .rc-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; font: 12px var(--font-mono); color: var(--muted-foreground); }
+  .rc-top .st { font: 600 11px var(--font-mono); padding: 1px 6px; border-radius: 3px; background: var(--accent); color: var(--foreground); }
+  .rc-new { font: 12px var(--font-mono); }
+  .d-chart-wrap { position: relative; padding: 16px; min-height: 0; display: flex; }
+  #d-chart { position: relative; flex: 1; min-height: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  #d-nochart { display: none; flex: 1; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 6px; color: var(--muted-foreground); font-size: 12px; text-align: center; padding: 16px; }
+  dl { margin: 0; padding: 12px 20px; }
+  dl > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; font-size: 14px; border-bottom: 1px solid color-mix(in oklch, var(--border) 70%, transparent); }
+  dl > div:last-child { border-bottom: 0; }
+  dt { color: var(--muted-foreground); flex-shrink: 0; }
+  dd { margin: 0; text-align: right; }
+  @media (max-width: 900px) {
+    dialog { height: calc(100dvh - 32px); }
+    .d-body { display: flex; flex-direction: column; overflow-y: auto; }
+    .d-chart-wrap { height: 55vh; flex-shrink: 0; }
+    .d-side { overflow: visible; border-left: 0; border-top: 1px solid var(--border); }
+  }
+  .chip { font: 500 12px var(--font-mono); padding: 2px 8px; border-radius: 2px; }
+  .chip.buy { background: color-mix(in oklch, var(--profit) 15%, transparent); color: var(--profit); }
+  .chip.sell { background: color-mix(in oklch, var(--loss) 15%, transparent); color: var(--loss); }
+
+  @media (min-width: 1024px) {
+    .body { flex-direction: row; }
+    aside { width: 380px; height: auto; border-top: 0; border-left: 1px solid var(--border); }
+  }
+
+  @media (max-width: 640px) {
+    header { gap: 10px; padding: 10px 16px; }
+    .who .acct { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">Pheeet</span>
+  <span class="divider"></span>
+  <select id="sym" aria-label="สัญลักษณ์"></select>
+  <span id="price">–</span>
+  <div class="account">
+    <span class="avatar">P</span>
+    <span class="who">
+      <span class="acct mono" id="acct">Exness · Demo</span>
+      <span id="status">กำลังเชื่อมต่อ…</span>
+    </span>
+  </div>
+</header>
+
+<div class="body">
+  <div class="chartcol">
+    <div class="toolbar" role="group" aria-label="Timeframe">
+      <button class="tf" data-tf="M1">M1</button>
+      <button class="tf" data-tf="M15">M15</button>
+    </div>
+    <main>
+      <div id="chart"></div>
+      <div id="trade-legend">↑ Buy &nbsp; ↓ Sell &nbsp; ○ ออก +กำไร / −ขาดทุน &nbsp;· แตะไม้ทางขวาเพื่อซูม</div>
+    </main>
+  </div>
+
+  <aside>
+    <section class="psum" aria-label="Profit Summary">
+      <div class="psum-head">
+        <h2>Profit Summary</h2>
+        <span class="psum-badge">DEMO</span>
+      </div>
+      <div class="psum-period">
+        <span>Reporting Period</span>
+        <div class="psum-dd" id="psum-dd">
+          <button type="button" class="psum-dd-btn" id="psum-dd-btn" aria-haspopup="listbox" aria-expanded="false">
+            <span id="psum-dd-label">Today</span><span class="chev"></span>
+          </button>
+          <div class="psum-dd-menu" id="psum-dd-menu" role="listbox" aria-label="ช่วงเวลา">
+            <button type="button" role="option" data-period="today">วันนี้</button>
+            <button type="button" role="option" data-period="yesterday">เมื่อวาน</button>
+            <button type="button" role="option" data-period="7d">7 วัน</button>
+            <button type="button" role="option" data-period="30d">1 เดือน</button>
+            <button type="button" role="option" data-period="year">ทั้งปี</button>
+          </div>
+        </div>
+      </div>
+      <div class="psum-net" id="psum-net-card">
+        <span class="lbl">Net Profit</span>
+        <span class="val" id="psum-net">–</span>
+      </div>
+      <div class="psum-split">
+        <div class="psum-side win">
+          <div class="kicker"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.5 12.5 12.5 3.5M6 3.5h6.5V10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Profit</div>
+          <div class="amt" id="psum-gp">–</div>
+          <div class="rule"></div>
+          <div class="foot"><span>Win</span><b id="psum-wins">–</b></div>
+        </div>
+        <div class="psum-side lose">
+          <div class="kicker"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.5 3.5 12.5 12.5M6 12.5h6.5V6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Loss</div>
+          <div class="amt" id="psum-gl">–</div>
+          <div class="rule"></div>
+          <div class="foot"><span>Loss</span><b id="psum-losses">–</b></div>
+        </div>
+      </div>
+      <div class="psum-foot">
+        <span class="metric">Win Rate <b id="psum-wr">–</b></span>
+        <span class="metric">Profit Factor <b id="psum-pf">–</b></span>
+      </div>
+      <div class="psum-bar" aria-hidden="true"><span id="psum-bar"></span></div>
+    </section>
+    <div class="aside-head">
+      <div>
+        <h2>Order History</h2>
+        <span class="hint">แตะไม้เพื่อดูบนกราฟ · ดับเบิลคลิกดูรายละเอียด</span>
+      </div>
+      <span class="count" id="count">–</span>
+    </div>
+    <div id="trades"><div class="empty">กำลังโหลด…</div></div>
+  </aside>
+</div>
+
+<dialog id="dlg" aria-labelledby="d-title">
+  <div class="d-head">
+    <h3 id="d-title"></h3>
+    <p id="d-sub"></p>
+    <button class="d-close" id="d-close" aria-label="ปิด">×</button>
+  </div>
+  <div class="d-body">
+    <div class="d-chart-wrap">
+      <div id="d-chart"></div>
+      <div id="d-nochart">ไม่มีแท่งของช่วงนี้ในฟีด</div>
+    </div>
+    <div class="d-side"><dl id="d-rows"></dl></div>
+  </div>
+</dialog>
+
+
+<dialog id="ai-dlg" aria-labelledby="ai-title">
+  <div class="d-head">
+    <h3 id="ai-title">AI วิเคราะห์</h3>
+    <p></p>
+    <button class="d-close" id="ai-close" aria-label="ปิด">×</button>
+  </div>
+  <div id="ai"></div>
+</dialog>
+
+<dialog id="rc-dlg" aria-labelledby="rc-title">
+  <div class="d-head">
+    <h3 id="rc-title">↻ ดูแล pending อัตโนมัติ</h3>
+    <p>โค้ดเช็กทุกนาที · AI ทบทวนทุกแท่ง M15 ปิด · 30 รายการล่าสุด</p>
+    <button class="d-close" id="rc-close" aria-label="ปิด">×</button>
+  </div>
+  <div id="rc-list"></div>
+</dialog>
+
+<script>
+// ---- Static GitHub Pages build: /api/* is served from data/*.json (published every 2 min from the server) ----
+const DATA_BASE = "data/";
+const _fetch = window.fetch.bind(window);
+const _bust = () => "?t=" + Math.floor(Date.now() / 30000);
+const _json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+window.fetch = async (url, opts) => {
+  const u = new URL(url, location.href);
+  if (!u.pathname.includes("/api/")) return _fetch(url, opts);
+  if (opts && opts.method && opts.method !== "GET") return _json({ error: "read-only" }, 405);
+  const ep = u.pathname.split("/api/")[1];
+  const get = (f) => _fetch(DATA_BASE + f + _bust(), { cache: "no-store" });
+  if (ep === "symbols") return get("symbols.json");
+  if (ep === "trades") return get("trades.json");
+  if (ep === "bars") {
+    const r = await get(`bars/${u.searchParams.get("sym")}_${u.searchParams.get("tf")}.json`);
+    if (!r.ok) return r;
+    const j = await r.json();
+    return _json({ digits: j.digits, bars: j.bars.map(([t, o, h, l, c, v]) => ({ time: t, open: o, high: h, low: l, close: c, volume: v })) });
+  }
+  return _json({ error: "not available on the static site" }, 404);
+};
+</script>
+<script>
+const TH = 7 * 3600;  // Exness server time is UTC; show Thai time
+const $ = (id) => document.getElementById(id);
+// Canvas colors = the oklch tokens above converted to sRGB.
+const C = { bg: "#080a0d", grid: "#111417", border: "#20242a", fg: "#e8ebef", muted: "#838a92", up: "#2dc5a6", down: "#e9504d" };
+
+const chart = LightweightCharts.createChart($("chart"), {
+  autoSize: true,
+  layout: { background: { color: C.bg }, textColor: C.muted, fontFamily: "IBM Plex Mono, monospace", fontSize: 11 },
+  grid: { vertLines: { color: C.grid }, horzLines: { color: C.grid } },
+  timeScale: { timeVisible: true, secondsVisible: false, borderColor: C.border },
+  rightPriceScale: { borderColor: C.border },
+  crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+});
+const series = chart.addCandlestickSeries({
+  upColor: C.up, downColor: C.down, borderVisible: false, wickUpColor: C.up, wickDownColor: C.down,
+});
+
+let lastTime = 0, firstTime = 0, focusedId = null, sym = null, tf = store("tf") === "M1" ? "M1" : "M15", loadSeq = 0;
+
+function store(key, v) {
+  try {
+    if (v === undefined) return localStorage.getItem("chartfeed-" + key);
+    localStorage.setItem("chartfeed-" + key, v);
+  } catch { return null; }
+}
+
+const toBar = (b) => ({ time: b.time + TH, open: b.open, high: b.high, low: b.low, close: b.close });
+
+async function load() {
+  const seq = ++loadSeq;
+  for (const b of document.querySelectorAll(".tf")) b.setAttribute("aria-pressed", String(b.dataset.tf === tf));
+  const r = await fetch(`/api/bars?sym=${encodeURIComponent(sym)}&tf=${tf}`);
+  if (seq !== loadSeq) return;
+  if (!r.ok) { series.setData([]); firstTime = lastTime = 0; return; }
+  const j = await r.json();
+  if (seq !== loadSeq) return;
+  series.applyOptions({ priceFormat: { type: "price", precision: j.digits, minMove: Math.pow(10, -j.digits) } });
+  series.setData(j.bars.map(toBar));
+  firstTime = j.bars.length ? j.bars[0].time : 0;
+  lastTime = j.bars.length ? j.bars[j.bars.length - 1].time : 0;
+  drawAnalysis();
+  viewForTrades();
+}
+
+function stream() {
+  const tick = async () => {
+    let d;
+    try { d = await (await _fetch(DATA_BASE + "live.json" + _bust(), { cache: "no-store" })).json(); } catch { $("status").className = "stale"; $("status").textContent = "โหลดข้อมูลไม่ได้"; return; }
+    const age = Date.now() / 1000 - d.feed_time;
+    const fresh = age < 300;
+    $("status").className = fresh ? "ok" : "stale";
+    $("status").textContent = `อัปเดต ${new Date(d.feed_time * 1000).toLocaleTimeString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" })} (${Math.max(0, Math.round(age / 60))} นาทีก่อน)`;
+    if (d.account) $("acct").textContent = `Exness · Demo · Bal ${d.account.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })} · Eq ${d.account.equity.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+    if (!sym) return;
+    const cur = d.series[`${sym}|${tf}`];
+    if (cur) for (const [t, o, h, l, c] of cur.bars) if (t >= lastTime) { series.update(toBar({ time: t, open: o, high: h, low: l, close: c })); lastTime = t; }
+    const m1 = d.series[`${sym}|M1`];
+    if (m1) {
+      const [, o, , , c] = m1.bars[m1.bars.length - 1];
+      livePrice = c;
+      const p = c.toLocaleString("en-US", { minimumFractionDigits: m1.digits, maximumFractionDigits: m1.digits });
+      $("price").textContent = p;
+      $("price").className = c >= o ? "up" : "down";
+      document.title = `${sym} ${p} · Pheeet`;
+    }
+  };
+  tick();
+  setInterval(tick, 60000);
+}
+
+// ---- Order History (real positions of the account: closed in the last 30 days + open now) ----
+const BOTS = { 2026111001: "Rider", 2026111101: "Catcher", 2026111201: "Asia", 2026110701: "PheeetTrend", 2026102901: "Pheeet AI", 2026102802: "Ngern", 2026102801: "mc", 2026100601: "FlyIndex", 2026100602: "FlyBTC", 2026100501: "Stonkfly", 2026101901: "DOBBY", 463001: "SignalScalper", 0: "Manual" };
+const botName = (t) => BOTS[t.magic] ?? (t.magic >= 8000 && t.magic < 8100 ? "Asgard Gold" : t.comment || `Magic ${t.magic}`);
+const REASON = { SL: "ชน SL", TP: "ชน TP", SO: "Stop out", EA: "บอทปิด", MANUAL: "ปิดเอง" };
+const fmtTime = (t) => new Date(t * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const fmtPx = (v, d) => v ? v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }) : "–";
+const fmtUsd = (v) => (v >= 0 ? "+$" : "-$") + Math.abs(v).toFixed(2);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function fmtDur(sec) {
+  const m = Math.round(sec / 60);
+  if (m < 60) return `${m} นาที`;
+  if (m < 1440) return `${Math.floor(m / 60)} ชม. ${m % 60} นาที`;
+  return `${Math.floor(m / 1440)} วัน ${Math.floor((m % 1440) / 60)} ชม.`;
+}
+
+// ---- Profit Summary (Thai calendar days, Asia/Bangkok) ----
+const PERIODS = [
+  { id: "today", labelTh: "วันนี้", labelEn: "Today" },
+  { id: "yesterday", labelTh: "เมื่อวาน", labelEn: "Yesterday" },
+  { id: "7d", labelTh: "7 วัน", labelEn: "7 days" },
+  { id: "30d", labelTh: "1 เดือน", labelEn: "1 month" },
+  { id: "year", labelTh: "ทั้งปี", labelEn: "This year" },
+];
+let period = PERIODS.some((p) => p.id === store("psum")) ? store("psum") : "today";
+
+function thaiYmd(ms) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(new Date(ms)).filter((x) => x.type !== "literal").map((x) => [x.type, x.value])
+  );
+  return { y: +p.year, m: +p.month, d: +p.day };
+}
+// Bangkok midnight as unix seconds (Thailand has no DST).
+const thaiMidnight = (y, m, d) => Date.UTC(y, m - 1, d, 0, 0, 0) / 1000 - 7 * 3600;
+const fmtDayEn = (y, m, d) =>
+  new Date(Date.UTC(y, m - 1, d, 12)).toLocaleString("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
+const fmtDayShort = (y, m, d) =>
+  new Date(Date.UTC(y, m - 1, d, 12)).toLocaleString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" });
+
+function periodWindow(id, nowMs = Date.now()) {
+  const { y, m, d } = thaiYmd(nowMs);
+  const today0 = thaiMidnight(y, m, d);
+  if (id === "today")
+    return { start: today0, end: today0 + 86400, label: `Today · ${fmtDayEn(y, m, d)}` };
+  if (id === "yesterday") {
+    const { y: yy, m: ym, d: yd } = thaiYmd((today0 - 1) * 1000);
+    return { start: today0 - 86400, end: today0, label: `Yesterday · ${fmtDayEn(yy, ym, yd)}` };
+  }
+  if (id === "7d") {
+    const start = today0 - 6 * 86400;
+    const s = thaiYmd(start * 1000);
+    return { start, end: today0 + 86400, label: `7 days · ${fmtDayShort(s.y, s.m, s.d)} – ${fmtDayEn(y, m, d)}` };
+  }
+  if (id === "30d") {
+    const start = today0 - 29 * 86400;
+    const s = thaiYmd(start * 1000);
+    return { start, end: today0 + 86400, label: `Last 30 days · ${fmtDayShort(s.y, s.m, s.d)} – ${fmtDayEn(y, m, d)}` };
+  }
+  return { start: thaiMidnight(y, 1, 1), end: thaiMidnight(y + 1, 1, 1), label: `This year · ${y}` };
+}
+
+function inPeriod(t, win = periodWindow(period)) {
+  if (t.state !== "closed" || !t.close_t) return false;
+  return t.close_t >= win.start && t.close_t < win.end;
+}
+function visibleTrades() {
+  return trades.filter((t) => t.state !== "closed" || inPeriod(t));
+}
+
+function renderSummary() {
+  const win = periodWindow(period);
+  const closed = trades.filter((t) => inPeriod(t, win));
+  const wins = closed.filter((t) => t.net > 0);
+  const losses = closed.filter((t) => t.net < 0);
+  const gp = wins.reduce((s, t) => s + t.net, 0);
+  const gl = losses.reduce((s, t) => s + t.net, 0);
+  const net = closed.reduce((s, t) => s + t.net, 0);
+  const n = closed.length;
+  const short = PERIODS.find((p) => p.id === period)?.labelEn || "Today";
+  $("psum-dd-label").textContent = short;
+  $("psum-dd-btn").title = win.label;
+  for (const b of document.querySelectorAll("#psum-dd-menu [data-period]"))
+    b.setAttribute("aria-selected", b.dataset.period === period ? "true" : "false");
+  const netEl = $("psum-net"), card = $("psum-net-card");
+  netEl.textContent = n || net ? fmtUsd(net) : "$0.00";
+  netEl.className = "val " + (net > 0 ? "pos" : net < 0 ? "neg" : "");
+  card.className = "psum-net" + (net > 0 ? "" : net < 0 ? " neg" : " flat");
+  const wr = n ? (wins.length / n * 100) : 0;
+  $("psum-wr").textContent = n ? wr.toFixed(1) + "%" : "—";
+  $("psum-pf").textContent = gl < 0 ? (gp / -gl).toFixed(2) : (gp > 0 ? "∞" : "—");
+  $("psum-gp").textContent = gp ? fmtUsd(gp) : "$0.00";
+  $("psum-gl").textContent = gl ? fmtUsd(gl) : "$0.00";
+  $("psum-wins").textContent = String(wins.length);
+  $("psum-losses").textContent = String(losses.length);
+  $("psum-bar").style.width = (n ? wr : 0) + "%";
+}
+
+let trades = [];
+
+function renderTrades() {
+  renderSummary();
+  const list = visibleTrades();
+  const open = list.filter((t) => t.state === "open").length, pend = list.filter((t) => t.state === "pending").length;
+  const closed = list.filter((t) => t.state === "closed").length;
+  $("count").textContent = [open && `${open} เปิด`, pend && `${pend} pend`, `${closed} ปิด`].filter(Boolean).join(" · ");
+  $("count").title = `${closed} ปิด · ${open} เปิด · ${pend} pending`;
+  $("trades").innerHTML = list.length ? list.map((t) => {
+    const buy = t.dir === 0;
+    const timeLine = t.state === "pending" ? `ตั้งไว้ ${fmtTime(t.open_t)}`
+      : t.state === "open" ? `เข้า ${fmtTime(t.open_t)} · ถือ ${fmtDur(Date.now() / 1000 - t.open_t)}`
+      : `${fmtTime(t.open_t)} → ${fmtTime(t.close_t)}`;
+    const pxLine = t.state === "pending" ? `รอเข้า @ ${fmtPx(t.open_px, t.digits)}`
+      : t.state === "open" ? `${fmtPx(t.open_px, t.digits)} → ${fmtPx(t.close_px, t.digits)} (ตอนนี้)`
+      : `${fmtPx(t.open_px, t.digits)} → ${fmtPx(t.close_px, t.digits)}`;
+    const ea = botName(t) + (t.magic ? ` (${t.magic})` : "");
+    const why = t.state === "closed" && (REASON[t.reason] || t.reason) ? ` · ${REASON[t.reason] ?? t.reason}` : "";
+    const dim = sym && t.symbol !== sym ? " dim" : "";
+    const on = String(t.id) === String(focusedId) ? " on" : "";
+    return `<button class="trade${dim}${on}" data-id="${esc(t.id)}">
+      <span class="bar ${buy ? "bg-buy" : "bg-sell"}"></span>
+      <span class="t-main">
+        <span class="t-top">
+          <span class="t-sym">${esc(t.symbol)}</span>
+          <span class="t-dir ${buy ? "pos" : "neg"}">${buy ? "Buy" : "Sell"}</span>
+          <span class="t-lots">${t.lots} lot</span>
+          ${t.state === "open" ? '<span class="t-open">OPEN</span>' : t.state === "pending" ? '<span class="t-pend">PENDING</span>' : ""}
+        </span>
+        <span class="t-sub">${timeLine}<br><span class="t-px">${pxLine}</span><br>${esc(ea)}${esc(why)}</span>
+      </span>
+      ${t.state === "pending" ? `<span class="t-net" style="font-size:12px;color:var(--muted-foreground)">@ ${fmtPx(t.open_px, t.digits)}</span>`
+        : `<span class="t-net ${t.net >= 0 ? "pos" : "neg"}">${fmtUsd(t.net)}</span>`}
+    </button>`;
+  }).join("") : '<div class="empty">ไม่มีไม้ที่ปิดในช่วงนี้</div>';
+}
+async function loadTrades() {
+  try {
+    const j = await (await fetch("/api/trades")).json();
+    trades = j.trades;
+  } catch { return; }
+  renderTrades();
+  drawAnalysis();  // position / pending lines and entry/exit marks follow the account
+}
+const tradeById = (id) => trades.find((x) => String(x.id) === String(id));
+$("trades").onclick = (e) => {
+  const b = e.target.closest(".trade");
+  if (b) focusTrade(tradeById(b.dataset.id));
+};
+$("trades").ondblclick = (e) => {
+  const b = e.target.closest(".trade");
+  if (b) openTrade(tradeById(b.dataset.id));
+};
+const psumDd = $("psum-dd");
+const closePsumDd = () => {
+  psumDd.classList.remove("open");
+  $("psum-dd-btn").setAttribute("aria-expanded", "false");
+};
+$("psum-dd-btn").onclick = (e) => {
+  e.stopPropagation();
+  const open = !psumDd.classList.contains("open");
+  psumDd.classList.toggle("open", open);
+  $("psum-dd-btn").setAttribute("aria-expanded", open ? "true" : "false");
+};
+$("psum-dd-menu").onclick = (e) => {
+  const b = e.target.closest("[data-period]");
+  if (!b) return;
+  closePsumDd();
+  if (b.dataset.period === period) return;
+  period = b.dataset.period;
+  store("psum", period);
+  focusedId = null;
+  renderTrades();
+  drawAnalysis();
+};
+document.addEventListener("click", (e) => {
+  if (!psumDd.contains(e.target)) closePsumDd();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closePsumDd();
+});
+
+let dChart = null;
+$("d-close").onclick = () => $("dlg").close();
+$("dlg").onclick = (e) => { if (e.target === $("dlg")) $("dlg").close(); };
+$("dlg").addEventListener("close", () => { if (dChart) { dChart.remove(); dChart = null; } });
+
+const TYPE_TH = { BUY_LIMIT: "Buy Limit", SELL_LIMIT: "Sell Limit", BUY_STOP: "Buy Stop", SELL_STOP: "Sell Stop" };
+
+function openPending(t) {
+  const buy = t.dir === 0, d = t.digits, mine = false;  // read-only site
+  $("d-title").textContent = `${botName(t)} · ${t.symbol}`;
+  $("d-sub").textContent = `ตั้งไว้ ${fmtTime(t.open_t)}` + (t.close_t ? ` · หมดอายุ ${fmtTime(t.close_t)}` : "");
+  const risk = t.sl ? Math.abs(t.open_px - t.sl) : 0;
+  const rows = [
+    ["Order", `<span class="mono">#${esc(t.id)}</span>`],
+    ["ชนิด", `<span class="chip ${buy ? "buy" : "sell"}">${TYPE_TH[t.reason] ?? esc(t.reason)}</span>`],
+    ["Lots", `<span class="mono">${t.lots}</span>`],
+    ["ราคาเข้า", `<span class="mono">${fmtPx(t.open_px, d)}</span>`],
+    ["SL", `<span class="mono neg">${fmtPx(t.sl, d)}</span>`],
+    ["TP", `<span class="mono pos">${fmtPx(t.tp, d)}</span>`],
+    ["R:R", `<span class="mono">${risk && t.tp ? (Math.abs(t.tp - t.open_px) / risk).toFixed(2) : "–"}</span>`],
+  ];
+  if (t.comment) rows.push(["Comment", `<span class="mono" style="font-size:12px">${esc(t.comment)}</span>`]);
+  $("d-rows").innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")
+    + (mine ? `<button class="cancel-btn" id="d-cancel">ยกเลิกออเดอร์นี้</button>` : "");
+  if (mine) $("d-cancel").onclick = async () => {
+    $("d-cancel").disabled = true; $("d-cancel").textContent = "กำลังยกเลิก…";
+    const r = await (await fetch(`/api/cancel?ticket=${encodeURIComponent(t.id)}`, { method: "POST" })).json();
+    $("d-cancel").textContent = r.ok ? "ยกเลิกแล้ว" : `ยกเลิกไม่ได้: ${r.message}`;
+    setTimeout(loadTrades, 11000);
+  };
+  $("dlg").showModal();
+  return tradeChart(t);
+}
+
+async function openTrade(t) {
+  if (t.state === "pending") return openPending(t);
+  const buy = t.dir === 0, open = t.state === "open", d = t.digits;
+  const exit = t.close_px;  // for an open position the EA writes the current price here
+  const risk = t.sl ? Math.abs(t.open_px - t.sl) : 0;
+  const move = (exit - t.open_px) * (buy ? 1 : -1);
+  const rTxt = risk ? `${move / risk >= 0 ? "+" : ""}${(move / risk).toFixed(2)}R` : "–";
+  const cls = t.net >= 0 ? "pos" : "neg";
+  $("d-title").textContent = `${botName(t)} · ${t.symbol}`;
+  $("d-sub").textContent = open ? `เปิดอยู่ตั้งแต่ ${fmtTime(t.open_t)}` : `${fmtTime(t.open_t)} → ${fmtTime(t.close_t)}`;
+  const rows = [
+    ["Position", `<span class="mono">#${esc(t.id)}</span>`],
+    ["ทิศทาง", `<span class="chip ${buy ? "buy" : "sell"}">${buy ? "Buy" : "Sell"}</span>`],
+    ["Lots", `<span class="mono">${t.lots}</span>`],
+    ["Entry", `<span class="mono">${fmtPx(t.open_px, d)}</span>`],
+    [open ? "ราคาตอนนี้" : "Exit", `<span class="mono">${fmtPx(exit, d)}</span>`],
+    ["SL", `<span class="mono neg">${fmtPx(t.sl, d)}</span>`],
+    ["TP", `<span class="mono pos">${fmtPx(t.tp, d)}</span>`],
+    [open ? "กำไร/ขาดทุนลอย" : "ผลสุทธิ", `<span class="mono ${cls}" style="font-weight:600">${fmtUsd(t.net)}</span>`],
+    ["ผลลัพธ์ (เทียบ SL ตอนเปิด)", `<span class="mono ${cls}" style="font-weight:600">${rTxt}</span>`],
+    [open ? "ถือมาแล้ว" : "ถือ", fmtDur((open ? Date.now() / 1000 : t.close_t) - t.open_t)],
+  ];
+  if (!open) rows.push(["ปิดด้วย", REASON[t.reason] ?? t.reason]);
+  if (t.comment) rows.push(["Comment", `<span class="mono" style="font-size:12px">${esc(t.comment)}</span>`]);
+  $("d-rows").innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("");
+  $("dlg").showModal();
+  await tradeChart(t);
+}
+
+// Mini chart around the trade from the feed's bars (M1 when the trade fits in it, else M15).
+async function tradeChart(t) {
+  const end = t.state !== "closed" ? Infinity : t.close_t;
+  let bars = null;
+  for (const tf of ["M1", "M15"]) {
+    const r = await fetch(`/api/bars?sym=${encodeURIComponent(t.symbol)}&tf=${tf}`);
+    if (!r.ok) break;
+    const all = (await r.json()).bars;
+    if (!all.length || all[0].time > t.open_t) continue;
+    const span = tf === "M1" ? 60 : 900;
+    const pad = Math.max(60 * span, ((end === Infinity ? all[all.length - 1].time : end) - t.open_t) * 1.2);
+    bars = all.filter((b) => b.time >= t.open_t - pad && b.time <= (end === Infinity ? Infinity : end + pad));
+    if (tf === "M1" && bars.length > 1200) { bars = null; continue; }
+    bars.span = span;
+    break;
+  }
+  if (!$("dlg").open) return;
+  const has = bars && bars.length > 1;
+  $("d-chart").style.display = has ? "block" : "none";
+  $("d-nochart").style.display = has ? "none" : "flex";
+  if (!has) return;
+  dChart = LightweightCharts.createChart($("d-chart"), {
+    autoSize: true,
+    layout: { background: { color: C.bg }, textColor: C.muted, fontFamily: "IBM Plex Mono, monospace", fontSize: 11 },
+    grid: { vertLines: { color: C.grid }, horzLines: { color: C.grid } },
+    timeScale: { timeVisible: true, borderColor: C.border },
+    rightPriceScale: { borderColor: C.border },
+  });
+  const s = dChart.addCandlestickSeries({ upColor: C.up, downColor: C.down, borderVisible: false, wickUpColor: C.up, wickDownColor: C.down,
+    priceFormat: { type: "price", precision: t.digits, minMove: Math.pow(10, -t.digits) } });
+  s.setData(bars.map(toBar));
+  const snap = (x) => Math.floor(x / bars.span) * bars.span + TH;
+  const buy = t.dir === 0;
+  const marks = [{ time: snap(t.open_t), position: buy ? "belowBar" : "aboveBar", color: buy ? C.up : C.down, shape: buy ? "arrowUp" : "arrowDown", text: buy ? "Buy" : "Sell" }];
+  if (t.state === "closed") marks.push({ time: snap(t.close_t), position: buy ? "aboveBar" : "belowBar", color: C.fg, shape: "circle", text: "Exit" });
+  s.setMarkers(marks);
+  s.createPriceLine({ price: t.open_px, color: C.muted, lineStyle: 2, lineWidth: 1, title: "Entry" });
+  if (t.sl) s.createPriceLine({ price: t.sl, color: C.down, lineStyle: 2, lineWidth: 1, title: "SL" });
+  if (t.tp) s.createPriceLine({ price: t.tp, color: C.up, lineStyle: 2, lineWidth: 1, title: "TP" });
+  dChart.timeScale().fitContent();
+}
+
+// ---- AI: two buttons (analyze + enter, review open positions) → background job → poll → panel + lines ----
+let liveZones = null, livePrice = null, lots = 0.01, analysis = null, reviewRes = null, showLines = store("lines") !== "0", aiLines = [], pollTimer = null, lastState = null;
+// Line colors agreed with เพชร 2026-10-29: trade lines and zones use different hues so S/TP and R/SL never look alike.
+// Zones (เพชร 2026-10-29, after trying one line per side): every zone again, as a faint band plus its two edge lines;
+// the nearest support below and resistance above get solid, thicker edges and a Thai label, the rest stay thin and dashed.
+const L = { price: "#f5f7fa", entry: "#4c8dff", sl: "#ff5a5f", tp: "#2ecc71", bo: "#f2c94c", res: "#f08a3c", sup: "#3fb6e0", broken: "#838a92", exit: "#ff9f43" };
+const ZST = { valid: "ใช้ได้", broken: "ถูกทะลุ", flipped: "กลับบทบาท" };
+const TREND = { up: ["ขาขึ้น", "pos"], down: ["ขาลง", "neg"], sideways: ["Sideways", ""] };
+const VERDICT = { hold: "ถือต่อ", caution: "ระวัง", exit: "ควรออก" };
+const TPC = { likely: "น่าจะถึง", doubtful: "ไม่แน่", unlikely: "ไม่น่าถึง" };
+const list = (xs) => xs && xs.length ? `<ul>${xs.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : "";
+const short = (t, n = 110) => { t = String(t ?? ""); const i = t.search(/[.!?]\s|ๆ?\s—|;/); const c = i > 20 && i < n ? t.slice(0, i) : t; return c.length > n ? c.slice(0, n) + "…" : c; };
+// Faint zone bands under the candles (lightweight-charts series primitive).
+const bands = {
+  list: [], series: null, req: null,
+  attached({ series: se, requestUpdate }) { this.series = se; this.req = requestUpdate; },
+  detached() { this.series = null; },
+  set(list) { this.list = list; this.req && this.req(); },
+  updateAllViews() {},
+  paneViews() {
+    const self = this;
+    return [{ zOrder: () => "bottom", renderer: () => ({ draw(target) {
+      target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, verticalPixelRatio: vr }) => {
+        for (const b of self.list) {
+          const y1 = self.series.priceToCoordinate(b.hi), y2 = self.series.priceToCoordinate(b.lo);
+          if (y1 == null || y2 == null) continue;
+          ctx.fillStyle = b.color;
+          ctx.fillRect(0, Math.min(y1, y2) * vr, bitmapSize.width, Math.max(2, Math.abs(y2 - y1) * vr));
+        }
+      });
+    } }) }];
+  },
+};
+series.attachPrimitive(bands);
+// Custom overlay: entry arrow, exit dot, dashed win/loss link, profit label. Drawn in price/time space.
+const tradeLinks = {
+  list: [], series: null, chart: null, req: null,
+  attached(p) { this.chart = p.chart; this.series = p.series; this.req = p.requestUpdate; },
+  detached() { this.chart = this.series = this.req = null; },
+  set(list) { this.list = list; this.req && this.req(); },
+  updateAllViews() {},
+  paneViews() {
+    const self = this;
+    return [{ zOrder: () => "top", renderer: () => ({ draw(target) {
+      target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, horizontalPixelRatio: hr, verticalPixelRatio: vr }) => {
+        if (!self.chart || !self.series) return;
+        const ts = self.chart.timeScale();
+        const vis = [];
+        for (const t of self.list) {
+          const x1 = ts.timeToCoordinate(t.t1), y1 = self.series.priceToCoordinate(t.p1);
+          const x2 = ts.timeToCoordinate(t.t2), y2 = self.series.priceToCoordinate(t.p2);
+          vis.push({ t, x1, y1, x2, y2 });
+        }
+        const inView = vis.filter((v) => {
+          if (v.x1 == null && v.x2 == null) return false;
+          const a = v.x1 ?? v.x2, b = v.x2 ?? v.x1;
+          const w = bitmapSize.width / hr;
+          return Math.max(a, b) >= -20 && Math.min(a, b) <= w + 20;
+        });
+        const showEntryLabel = inView.length <= 18;
+        const showExitLabel = inView.length <= 28;
+        const used = [];
+        const overlap = (a, b) => a.l < b.l + b.w && a.l + a.w > b.l && a.t < b.t + b.h && a.t + a.h > b.t;
+        const pill = (x, y, text, fg, above, big) => {
+          ctx.font = `600 ${(big ? 12 : 11) * vr}px "IBM Plex Mono", ui-monospace, monospace`;
+          const padX = (big ? 6 : 5) * hr, padY = (big ? 3.5 : 2.5) * vr;
+          const tw = ctx.measureText(text).width, w = tw + padX * 2, h = (big ? 12 : 11) * vr + padY * 2;
+          let l = x - w / 2, top = above ? y - h - 10 * vr : y + 10 * vr;
+          l = Math.max(2 * hr, Math.min(l, bitmapSize.width - w - 2 * hr));
+          const box = { l, t: top, w, h };
+          for (let i = 0; i < 10; i++) {
+            if (!used.some((u) => overlap(box, u))) break;
+            box.t += (above ? -1 : 1) * (h + 2 * vr);
+          }
+          if (box.t < 0) box.t = 2 * vr;
+          if (box.t + h > bitmapSize.height) box.t = bitmapSize.height - h - 2 * vr;
+          used.push(box);
+          ctx.beginPath();
+          const r = 3 * Math.max(hr, vr);
+          const x0 = box.l, y0 = box.t, x1 = box.l + box.w, y1 = box.t + box.h;
+          ctx.moveTo(x0 + r, y0); ctx.lineTo(x1 - r, y0); ctx.quadraticCurveTo(x1, y0, x1, y0 + r);
+          ctx.lineTo(x1, y1 - r); ctx.quadraticCurveTo(x1, y1, x1 - r, y1);
+          ctx.lineTo(x0 + r, y1); ctx.quadraticCurveTo(x0, y1, x0, y1 - r);
+          ctx.lineTo(x0, y0 + r); ctx.quadraticCurveTo(x0, y0, x0 + r, y0);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(8,10,13,0.88)";
+          ctx.fill();
+          ctx.strokeStyle = fg;
+          ctx.lineWidth = Math.max(1, (big ? 1.6 : 1.2) * hr);
+          ctx.stroke();
+          ctx.fillStyle = fg;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(text, x0 + w / 2, y0 + h / 2);
+        };
+        const arrow = (x, y, up, color, scale) => {
+          const s = 11 * scale * Math.max(hr, vr);
+          ctx.beginPath();
+          if (up) { ctx.moveTo(x, y); ctx.lineTo(x + s * 0.72, y + s * 1.15); ctx.lineTo(x - s * 0.72, y + s * 1.15); }
+          else { ctx.moveTo(x, y); ctx.lineTo(x + s * 0.72, y - s * 1.15); ctx.lineTo(x - s * 0.72, y - s * 1.15); }
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.strokeStyle = "#080a0d";
+          ctx.lineWidth = Math.max(1, 1.2 * hr);
+          ctx.stroke();
+        };
+        const ordered = inView.slice().sort((a, b) => (a.t.focus ? 1 : 0) - (b.t.focus ? 1 : 0));
+        for (const v of ordered) {
+          const { t } = v;
+          const color = t.color;
+          const x1 = v.x1 != null ? v.x1 * hr : null;
+          const y1 = v.y1 != null ? v.y1 * vr : null;
+          const x2 = v.x2 != null ? v.x2 * hr : null;
+          const y2 = v.y2 != null ? v.y2 * vr : null;
+          ctx.save();
+          if (x1 != null && y1 != null && x2 != null && y2 != null) {
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = t.focus ? 1 : 0.92;
+            ctx.lineWidth = Math.max(1.5, (t.focus ? 3 : 2) * hr);
+            ctx.setLineDash([6 * hr, 4 * hr]);
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1;
+          }
+          if (x1 != null && y1 != null) arrow(x1, y1, t.buy, t.buy ? C.up : C.down, t.focus ? 1.25 : 1);
+          if (t.closed && x2 != null && y2 != null) {
+            const r = (t.focus ? 6 : 5) * Math.max(hr, vr);
+            ctx.beginPath(); ctx.arc(x2, y2, r, 0, Math.PI * 2);
+            ctx.fillStyle = color; ctx.fill();
+            ctx.strokeStyle = "#080a0d"; ctx.lineWidth = Math.max(1, 1.2 * hr); ctx.stroke();
+          }
+          const entryTxt = `${t.buy ? "Buy" : "Sell"} ${t.lots}`;
+          const exitTxt = t.closed ? (t.net >= 0 ? "+" : "") + t.net.toFixed(2) : ("OPEN " + (t.net >= 0 ? "+" : "") + t.net.toFixed(2));
+          if ((showEntryLabel || t.focus) && x1 != null && y1 != null)
+            pill(x1, y1, entryTxt, t.buy ? C.up : C.down, !t.buy, t.focus);
+          if ((showExitLabel || t.focus) && (t.closed || t.open) && x2 != null && y2 != null)
+            pill(x2, y2, exitTxt, color, t.buy || !t.closed, t.focus);
+          ctx.restore();
+        }
+      });
+    }}) }];
+  },
+};
+series.attachPrimitive(tradeLinks);
+series.applyOptions({ priceLineColor: L.price, priceLineStyle: LightweightCharts.LineStyle.Dotted, priceLineWidth: 1 });
+
+
+$("ai-close").onclick = () => $("ai-dlg").close();
+$("ai-dlg").onclick = (e) => { if (e.target === $("ai-dlg")) $("ai-dlg").close(); };
+
+function clearLines() {
+  for (const l of aiLines) series.removePriceLine(l);
+  aiLines = [];
+  bands.set([]);
+}
+
+function snapTime(t) {
+  const span = tf === "M1" ? 60 : 900;
+  return Math.floor(t / span) * span + TH;
+}
+
+function applyTradeOverlays() {
+  const marks = [], links = [];
+  if (sym) {
+    for (const t of trades) {
+      if (t.symbol !== sym || t.state === "pending") continue;
+      if (t.state === "closed" && !inPeriod(t)) continue;
+      const buy = t.dir === 0, closed = t.state === "closed";
+      const t2 = closed && t.close_t ? snapTime(t.close_t) : (lastTime ? lastTime + TH : snapTime(t.open_t));
+      const p2 = closed ? t.close_px : t.open_px;  // open: horizontal line at entry
+      links.push({
+        id: t.id, buy, lots: t.lots, net: t.net, closed, open: t.state === "open",
+        focus: String(t.id) === String(focusedId),
+        t1: snapTime(t.open_t), p1: t.open_px, t2, p2,
+        color: t.state === "open" ? L.entry : (t.net >= 0 ? C.up : C.down),
+      });
+    }
+  }
+  marks.sort((a, b) => a.time - b.time);
+  series.setMarkers(marks);
+  tradeLinks.set(links);
+}
+
+function zoomToTrade(t) {
+  if (!lastTime) return;
+  const span = tf === "M1" ? 60 : 900;
+  const t1 = snapTime(t.open_t);
+  const t2 = t.state === "closed" && t.close_t ? snapTime(t.close_t) : (lastTime + TH);
+  const pad = Math.max(span * 40, Math.max(span, t2 - t1) * 1.25, tf === "M1" ? 30 * 60 : 8 * 900);
+  const from = Math.max(firstTime + TH, t1 - pad);
+  const to = Math.max(from + span * 20, Math.min(lastTime + TH + span * 5, t2 + pad));
+  try { chart.timeScale().setVisibleRange({ from, to }); } catch {}
+}
+
+function viewForTrades() {
+  if (focusedId) {
+    const t = trades.find((x) => String(x.id) === String(focusedId) && x.symbol === sym);
+    if (t) { zoomToTrade(t); return; }
+  }
+  if (!lastTime) { chart.timeScale().scrollToRealTime(); return; }
+  const span = tf === "M1" ? 60 : 900;
+  const lastDisp = lastTime + TH, firstDisp = firstTime + TH;
+  const mine = trades.filter((t) => t.symbol === sym && t.state === "closed" && t.close_t && inPeriod(t)
+    && snapTime(t.open_t) >= firstDisp - span && snapTime(t.close_t) <= lastDisp + span)
+    .sort((a, b) => b.close_t - a.close_t);
+  if (!mine.length) { chart.timeScale().scrollToRealTime(); return; }
+  const maxBars = tf === "M1" ? 800 : 300;
+  let from = snapTime(mine[0].open_t);
+  for (const t of mine) {
+    const cand = snapTime(t.open_t);
+    if ((lastDisp - cand) / span > maxBars) break;
+    from = Math.min(from, cand);
+  }
+  from = Math.max(firstDisp, from - span * 20);
+  try { chart.timeScale().setVisibleRange({ from, to: lastDisp + span * 4 }); }
+  catch { chart.timeScale().scrollToRealTime(); }
+}
+
+async function focusTrade(t) {
+  if (!t) return;
+  focusedId = t.id;
+  let reload = false;
+  if (t.symbol && t.symbol !== sym) {
+    sym = t.symbol;
+    $("sym").value = sym;
+    store("sym", sym);
+    $("price").textContent = "–"; $("price").className = "";
+    analysis = null;
+    reload = true;
+    refreshAnalysis();
+  }
+  const span = tf === "M1" ? 60 : 900;
+  const inBars = firstTime && t.open_t >= firstTime - span && (t.state !== "closed" || t.close_t <= lastTime + span);
+  if (!inBars && tf === "M1") { tf = "M15"; store("tf", tf); reload = true; }
+  renderTrades();
+  const row = document.querySelector(`#trades .trade[data-id="${CSS.escape(String(t.id))}"]`);
+  if (row) row.scrollIntoView({ block: "nearest" });
+  if (reload) await load();
+  else { zoomToTrade(t); applyTradeOverlays(); }
+}
+
+async function loadZones() {
+  if (!sym) return;
+  const forSym = sym;
+  try {
+    const r = await fetch(`/api/zones?sym=${encodeURIComponent(forSym)}`);
+    if (!r.ok || forSym !== sym) return;
+    liveZones = await r.json();
+  } catch { return; }
+  drawAnalysis();
+}
+
+function drawAnalysis() {
+  // Chart shows candles + order-history markers only. S/R zones, swing labels,
+  // and AI plan/review lines stay off the chart (เพชร 2026-11-14).
+  clearLines();
+  applyTradeOverlays();
+}
+
+
+function legend() {
+  const i = (c, st = "solid") => `<i style="border-top-color:${c};border-top-style:${st}"></i>`;
+  return `<div class="legend"><span>${i(L.price, "dotted")}ราคา</span><span>${i(L.entry)}เข้า (ประ = pending)</span><span>${i(L.sl)}SL</span>
+    <span>${i(L.tp)}TP</span><span>${i(L.bo, "dashed")}Breakout</span><span>${i(L.res)}แนวต้าน (ทึบ = ใกล้สุด, ประ = ถัดไป)</span><span>${i(L.sup)}แนวรับ</span><span>โซนวาดสดจากโค้ดทุก 5 วิ · % = สถิติ BTC ย้อนหลัง 1 ปี: แท่ง M15 ปิดทะลุภายใน 4 ชม. (ไม่ใช่คำทำนาย)</span><span>${i(L.exit, "dotted")}จุดออกจาก AI</span></div>`;
+}
+
+function verdictCard(a) {
+  const d = a.digits, p = a.plan ?? {}, o = a.order;
+  const trade = p.action === "buy" || p.action === "sell";
+  const q = trade ? p : p.pending;
+  const side = trade ? p.action : q?.side;
+  const kind = trade ? (p.entry_type === "limit" || p.entry_type === "stop" ? " " + p.entry_type.toUpperCase() : "") : q ? " " + q.type.toUpperCase() : "";
+  const chip = side ? `${side.toUpperCase()}${kind}` : "รอ";
+  const keys = q ? `<div class="keys">
+      <div><div class="muted"><span class="sq" style="background:${L.entry}"></span>เข้า</div>${p.entry_type === "market" && trade ? "ตอนนี้" : fmtPx(q.entry, d)}</div>
+      <div><div class="muted"><span class="sq" style="background:${L.sl}"></span>SL</div>${fmtPx(q.sl, d)}</div>
+      <div><div class="muted"><span class="sq" style="background:${L.tp}"></span>TP1</div>${fmtPx(q.tp1, d)}</div></div>` : "";
+  let status = "";
+  if (o?.ok) {
+    const pend = o.type.includes("_");
+    status = `<div class="note ok">✓ ${pend ? "ตั้งออเดอร์แล้ว" : "เข้าไม้แล้ว"} ${esc(TYPE_TH[o.type] ?? o.type)} ${o.lots} lot @ ${fmtPx(pend ? o.entry : o.price, d)}${o.expire ? ` · หมดอายุ ${fmtTime(o.expire)}` : ""} · #${esc(o.ticket)}</div>`;
+  } else if (o && o.ok === false) status = `<div class="note no">ไม่ได้ส่งออเดอร์: ${esc(o.message)}</div>`;
+  else if (o) status = `<div class="note wait">${esc(o.message)}</div>`;
+  const wait = !trade && p.trigger ? `<div class="note wait">รอให้เกิด: ${esc(short(p.trigger, 160))}</div>` : "";
+  const inval = p.invalidation ? `<div class="note warn">⚠ ไอเดียผิดถ้า ${esc(short(p.invalidation, 140))}</div>` : "";
+  return `<div class="card hot">
+    <div class="vhead"><span class="vchip ${side ?? "wait"}">${esc(chip)}</span><span class="muted" style="margin-left:auto">ความมั่นใจ ${esc(p.confidence ?? "–")}${q?.rr1 ? ` · R:R ${q.rr1}` : ""}</span></div>
+    <div class="vline">${esc(p.headline || short(p.reason, 140))}</div>
+    ${keys}${status}${wait}${inval}
+    <details class="more"><summary>เหตุผลเต็ม</summary><p>${esc(p.reason ?? "")}</p>${p.pending?.why ? `<p>${esc(p.pending.why)}</p>` : ""}
+      ${p.trigger ? `<p>รอ: ${esc(p.trigger)}</p>` : ""}${p.invalidation ? `<p>ผิดเมื่อ: ${esc(p.invalidation)}</p>` : ""}${p.note || p.pending_note ? `<p>${esc(p.note || p.pending_note)}</p>` : ""}</details>
+  </div>`;
+}
+
+function fourRows(a) {
+  const d = a.digits, s = a.structure ?? {}, sr = a.sr ?? {}, bo = a.breakout ?? {}, cd = a.candles ?? {};
+  const [tl, tc] = TREND[s.trend] ?? [s.trend ?? "–", ""];
+  const row = (n, title, tag, cls, head, det) => `<div class="r4"><span class="n">${n}</span><span class="t">${title}</span>
+    <span class="tag ${cls}">${esc(tag || "–")}</span><span class="h">${esc(head)}</span><div class="det">${det}</div></div>`;
+  const zones = (sr.zones ?? []).map((z) => `<div class="zone"><span class="px" style="color:${z.status === "broken" ? L.broken : z.type === "support" ? L.sup : L.res}">${z.type === "support" ? "รับ" : "ต้าน"} ${fmtPx(z.low, d)}${z.high !== z.low ? "–" + fmtPx(z.high, d) : ""}</span>
+    <span class="st">${ZST[z.status] ?? esc(z.status)}</span><span>${esc(z.note ?? "")}</span></div>`).join("");
+  return `<div class="card" style="padding:2px 12px">
+    ${row("01", "โครงสร้าง", s.tag || tl, tc, s.headline || short(s.summary), `${esc(s.summary ?? "")}${list(s.evidence)}`)}
+    ${row("02", "แนวรับ / แนวต้าน", sr.tag, "", sr.headline || short(sr.summary), `${esc(sr.summary ?? "")}${zones}`)}
+    ${row("03", "เบรก / retest", bo.tag, "", bo.headline || short(bo.summary), `${esc(bo.summary ?? "")}
+      ${bo.happened?.length ? `<div class="sub">เกิดขึ้นแล้ว</div>${list(bo.happened)}` : ""}${bo.waiting?.length ? `<div class="sub">กำลังรอ</div>${list(bo.waiting)}` : ""}`)}
+    ${row("04", "แท่งเทียน", cd.tag, "", cd.headline || short(cd.summary), `${esc(cd.summary ?? "")}${list(cd.evidence)}`)}
+    <div class="muted" style="padding:4px 0 8px">แตะแต่ละข้อเพื่อดูหลักฐาน</div></div>`;
+}
+
+const RC_ACT = { cancel: "ยกเลิก", modify: "ย้ายราคา", keep: "คงไว้", error: "เช็กไม่สำเร็จ" };
+function renderRechecks() {
+  const rcs = lastState?.rechecks ?? [], d = analysis?.digits ?? 2;
+  $("rc-list").innerHTML = rcs.map((r) => `<div class="rc-row"><div class="rc-top"><span>${fmtTime(r.at)}</span>
+      <span class="st" style="${r.action === "cancel" ? "color:var(--loss)" : r.action === "modify" ? "color:#f2c94c" : ""}">${r.by === "ai" ? "AI" : "โค้ด"} · ${RC_ACT[r.action] ?? esc(r.action)}</span>
+      <span>#${esc(r.ticket)} ${esc(r.type ?? "")}</span></div>
+      ${r.new ? `<div class="rc-new">→ ${fmtPx(r.new.entry, d)} SL ${fmtPx(r.new.sl, d)} TP ${fmtPx(r.new.tp, d)}</div>` : ""}
+      <div>${esc(r.reason ?? "")}${r.ok === false ? ` (โบรกตอบ: ${esc(r.message)})` : ""}</div></div>`).join("")
+    || `<div class="empty" style="padding:16px 0">ยังไม่มีการดูแล pending ของสัญลักษณ์นี้</div>`;
+}
+const rcOpen = $("rc-open"); if (rcOpen) rcOpen.onclick = () => { renderRechecks(); $("rc-dlg").showModal(); };
+$("rc-close").onclick = () => $("rc-dlg").close();
+$("rc-dlg").onclick = (e) => { if (e.target === $("rc-dlg")) $("rc-dlg").close(); };
+
+function reviewCards(rv) {
+  if (!rv) return "";
+  const age = Math.round((Date.now() / 1000 - rv.at) / 60);
+  const head = `<div class="ai-meta"><span>ไม้ที่เปิด · ${fmtTime(rv.at)}</span><span class="${age > 15 ? "warn" : ""}">${age < 1 ? "เมื่อสักครู่" : age + " นาทีก่อน"}</span></div>`;
+  if (!rv.positions.length) return head + `<div class="card muted">ตอนวิเคราะห์ไม่มีไม้เปิดอยู่ในบัญชี</div>`;
+  return head + rv.positions.map((it) => {
+    const r = it.review, d = it.digits, side = it.side === "buy" ? "Buy" : "Sell";
+    const top = `<div class="vhead"><span style="font-size:13px">${esc(it.bot)} · ${side} ${it.lots} ${esc(it.symbol)} @ ${fmtPx(it.entry, d)}</span>
+      <span class="mono ${it.floating >= 0 ? "pos" : "neg"}" style="font-size:13px">${fmtUsd(it.floating)}</span>
+      ${r ? `<span class="vchip ${r.verdict}" style="margin-left:auto">${VERDICT[r.verdict]}</span>` : ""}</div>`;
+    if (!r) return `<div class="card">${top}<div class="note no">${esc(it.error ?? "วิเคราะห์ไม่สำเร็จ")}</div></div>`;
+    const box = (k, txt) => `<div class="${k} ${r.verdict === k ? "on" : ""}"><b>${VERDICT[k]}</b>${esc(txt || "–")}</div>`;
+    return `<div class="card rv">${top}<div class="vline" style="margin-bottom:0">${esc(r.headline ?? "")}</div>
+      <div class="rv3">${box("hold", r.hold_if)}${box("caution", r.verdict === "caution" ? r.headline : (r.reasons ?? [])[0])}${box("exit", r.exit_if)}</div>
+      ${r.note ? `<div class="note warn">${esc(r.note)}</div>` : ""}
+      ${list(r.reasons)}<div class="muted" style="margin-top:6px">TP ${fmtPx(it.tp, d)} · ${TPC[r.tp_chance] ?? "–"}${r.exit_level != null ? ` · จุดออก ${fmtPx(r.exit_level, d)}` : ""}</div></div>`;
+  }).join("");
+}
+
+function renderAnalysis(state) {
+  lastState = state;
+  if ($("rc-dlg").open) renderRechecks();
+  const a = state.result, rv = state.review;
+  const canTrade = (state.trade_symbols ?? []).includes(sym);
+  lots = state.lots ?? lots;
+  for (const [id, kind, label] of [["ai-review-btn", "review", "◎ วิเคราะห์ไม้ที่เปิด"], ["ai-trade-btn", "trade", "⚡ วิเคราะห์ + เข้าไม้"]]) {
+    const b = $(id);
+    b.style.display = canTrade ? "" : "none";
+    b.disabled = !!state.running;
+    b.textContent = state.running_kind === kind ? `กำลังวิเคราะห์… ${state.running_for ?? 0} วิ` : label;
+  }
+  if (!canTrade) {
+    $("ai").innerHTML = `<div class="empty">ปุ่ม AI ใช้กับ ${esc((state.trade_symbols ?? []).join(", "))} — สัญลักษณ์นี้ดูกราฟอย่างเดียว</div>`;
+    return;
+  }
+  const running = state.running ? `<div class="note wait" style="margin:0 0 12px">AI กำลัง${state.running_kind === "review" ? "อ่านไม้ที่เปิด" : "วิเคราะห์และเตรียมเข้าไม้"} ปกติราว 40 วินาที…</div>` : "";
+  const err = state.error ? `<div class="note no" style="margin:0 0 12px">รอบล่าสุดไม่สำเร็จ: ${esc(state.error)}</div>` : "";
+  let main = "";
+  if (a) {
+    const ageMin = Math.round((Date.now() / 1000 - a.at) / 60);
+    main = `<div class="ai-meta"><span>${esc(a.symbol)} · M15 · ${fmtTime(a.at)}</span>
+        <span class="${ageMin > 15 ? "warn" : ""}">${ageMin < 1 ? "เมื่อสักครู่" : ageMin + " นาทีก่อน"} · ราคา ${fmtPx(a.price_now, a.digits)}</span></div>
+      ${verdictCard(a)}${fourRows(a)}`;
+  }
+  // whichever button ran last goes on top
+  const reviewFirst = rv && (!a || rv.at > a.at);
+  const body = reviewFirst ? reviewCards(rv) + main : main + reviewCards(rv);
+  $("ai").innerHTML = running + err + (body || `<div class="empty">กด "วิเคราะห์ + เข้าไม้" หรือ "วิเคราะห์ไม้ที่เปิด"</div>`) + legend()
+    + `<div class="ai-foot"><span>${esc(a?.model ?? rv?.model ?? "")} · ความเห็น AI จากแท่งราคา ไม่ใช่ระบบที่ backtest แล้ว</span>
+      <button id="ai-lines">${showLines ? "ซ่อนเส้น" : "แสดงเส้น"}</button></div>`;
+  $("ai-lines").onclick = () => { showLines = !showLines; store("lines", showLines ? "1" : "0"); renderAnalysis(state); drawAnalysis(); };
+  for (const r of $("ai").querySelectorAll(".r4")) r.onclick = () => r.classList.toggle("open");
+}
+
+async function refreshAnalysis() {}
+
+
+(async () => {
+  setInterval(loadTrades, 60000);
+  const j = await (await fetch("/api/symbols")).json();
+  const sel = $("sym");
+  for (const s of j.symbols) sel.add(new Option(s, s));
+  const saved = store("sym");
+  sym = j.symbols.includes(saved) ? saved : (j.symbols.includes("BTCUSDm") ? "BTCUSDm" : j.symbols[0]);
+  sel.value = sym;
+  sel.onchange = () => { focusedId = null; sym = sel.value; store("sym", sym); $("price").textContent = "–"; $("price").className = ""; analysis = null; renderTrades(); load(); refreshAnalysis(); };
+  for (const b of document.querySelectorAll(".tf")) b.onclick = () => { tf = b.dataset.tf; store("tf", tf); load(); };
+  await loadTrades();
+  if (sym) await load();
+  refreshAnalysis();
+  stream();
+})();
+</script>
+</body>
+</html>

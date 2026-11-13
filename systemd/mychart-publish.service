@@ -1,0 +1,8 @@
+[Unit]
+Description=Publish ChartFeed dashboard data to GitHub Pages (Pheeet/MyChart gh-pages; read-only on ChartFeed)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/apps/mychart-pages/publish.py
+TimeoutStartSec=150
+Nice=10

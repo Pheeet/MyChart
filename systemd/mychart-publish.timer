@@ -1,5 +1,5 @@
 [Unit]
-Description=Publish MyChart dashboard every 2 minutes
+Description=Check every 2 minutes; MyChart publishes only after a trade closes
 
 [Timer]
 OnBootSec=1min

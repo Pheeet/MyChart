@@ -108,14 +108,18 @@ def build(out: Path):
     feed_time = int((FEED / "live.txt").stat().st_mtime)
     files = {}
     files["symbols.json"] = {"symbols": syms}
-    files["trades.json"] = {"trades": read_trades(), "age": 0}
+    closed = [t for t in read_trades() if t["state"] == "closed"]  # open / pending never published
+    files["trades.json"] = {"trades": closed, "age": 0}
     for s in syms:
         for tf in TFS:
             f = FEED / f"{s}_{tf}.csv"
             if f.exists():
                 bars = [bar(x) for x in f.read_text(encoding="ascii").split() if x.count(",") == 5]
                 files[f"bars/{s}_{tf}.json"] = {"digits": live.get(f"{s}|{tf}", {}).get("digits", 5), "bars": bars}
-    files["live.json"] = {"series": live, "account": read_account(), "feed_time": feed_time}
+    acct = read_account()
+    files["live.json"] = {"series": live, "account": {"balance": acct["balance"]} if acct else None,
+                          "feed_time": feed_time, "updated_at": int(time.time()),
+                          "last_close": max((t["close_t"] for t in closed), default=0)}
     (out / "data/bars").mkdir(parents=True)
     for name, obj in files.items():
         (out / "data" / name).write_text(json.dumps(obj, separators=(",", ":")), encoding="utf-8")
@@ -123,11 +127,9 @@ def build(out: Path):
     (out / ".nojekyll").write_text("")
     (out / ".github/workflows").mkdir(parents=True)
     (out / ".github/workflows/pages.yml").write_text(WORKFLOW)
-    # content hash (live.json feed_time excluded so an idle feed does not push)
+    # publish only when the set of closed trades changes (or the page / workflow changes)
     h = hashlib.sha256()
-    for name in sorted(files):
-        obj = dict(files[name]); obj.pop("feed_time", None)
-        h.update(name.encode()); h.update(json.dumps(obj, sort_keys=True).encode())
+    h.update(json.dumps(sorted(str(t["id"]) for t in closed)).encode())
     h.update((HERE / "site/index.html").read_bytes()); h.update(WORKFLOW.encode())
     return h.hexdigest()
 

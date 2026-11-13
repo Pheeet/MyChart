@@ -51,11 +51,11 @@ NEW_STREAM = r'''function stream() {
   const tick = async () => {
     let d;
     try { d = await (await _fetch(DATA_BASE + "live.json" + _bust(), { cache: "no-store" })).json(); } catch { $("status").className = "stale"; $("status").textContent = "โหลดข้อมูลไม่ได้"; return; }
-    const age = Date.now() / 1000 - d.feed_time;
-    const fresh = age < 300;
-    $("status").className = fresh ? "ok" : "stale";
-    $("status").textContent = `อัปเดต ${new Date(d.feed_time * 1000).toLocaleTimeString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" })} (${Math.max(0, Math.round(age / 60))} นาทีก่อน)`;
-    if (d.account) $("acct").textContent = `Exness · Demo · Bal ${d.account.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })} · Eq ${d.account.equity.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+    const at = d.updated_at || d.feed_time;
+    const thai = (x) => new Date(x * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    $("status").className = "ok";
+    $("status").textContent = `อัปเดตเมื่อมีไม้ปิด · ล่าสุด ${thai(at)} น. เวลาไทย`;
+    if (d.account) $("acct").textContent = `Exness · Demo · Balance ${d.account.balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     if (!sym) return;
     const cur = d.series[`${sym}|${tf}`];
     if (cur) for (const [t, o, h, l, c] of cur.bars) if (t >= lastTime) { series.update(toBar({ time: t, open: o, high: h, low: l, close: c })); lastTime = t; }
@@ -87,6 +87,12 @@ LOCAL = Path(__file__).with_name("local_secrets.txt")  # gitignored: account log
 bad_list = [x.strip() for x in LOCAL.read_text().split() if x.strip()] if LOCAL.exists() else []
 if re.search(r"\b\d{9}\b", re.sub(r"\b20261\d{4}\b", "", src)):
     sys.exit("9-digit number (possible login) left in page")
+# closed orders only; all times Thai (เพชร 2026-11-14)
+src = src.replace("↑ Buy &nbsp; ↓ Sell &nbsp; ○ ออก +กำไร / −ขาดทุน &nbsp;· แตะไม้ทางขวาเพื่อซูม", "↑ Buy &nbsp; ↓ Sell &nbsp; ○ ออก +กำไร / −ขาดทุน &nbsp;· เฉพาะไม้ที่ปิดแล้ว &nbsp;· เวลาไทย (UTC+7)")
+if "เวลาไทย (UTC+7)" not in src:
+    sys.exit("legend not found")
+sub("let lastTime = 0,", "const _onlyClosed = (a) => (a || []).filter((t) => t.state === \"closed\");\nlet lastTime = 0,")
+sub("    trades = j.trades;", "    trades = _onlyClosed(j.trades);")
 for bad in bad_list + ["ai-review-btn\").onclick", "startJob"]:
     if bad in src:
         sys.exit(f"still contains {bad}")

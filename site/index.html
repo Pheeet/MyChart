@@ -345,7 +345,7 @@
     </div>
     <main>
       <div id="chart"></div>
-      <div id="trade-legend">↑ Buy &nbsp; ↓ Sell &nbsp; ○ ออก +กำไร / −ขาดทุน &nbsp;· แตะไม้ทางขวาเพื่อซูม</div>
+      <div id="trade-legend">↑ Buy &nbsp; ↓ Sell &nbsp; ○ ออก +กำไร / −ขาดทุน &nbsp;· เฉพาะไม้ที่ปิดแล้ว &nbsp;· เวลาไทย (UTC+7)</div>
     </main>
   </div>
 
@@ -480,6 +480,7 @@ const series = chart.addCandlestickSeries({
   upColor: C.up, downColor: C.down, borderVisible: false, wickUpColor: C.up, wickDownColor: C.down,
 });
 
+const _onlyClosed = (a) => (a || []).filter((t) => t.state === "closed");
 let lastTime = 0, firstTime = 0, focusedId = null, sym = null, tf = store("tf") === "M1" ? "M1" : "M15", loadSeq = 0;
 
 function store(key, v) {
@@ -511,11 +512,11 @@ function stream() {
   const tick = async () => {
     let d;
     try { d = await (await _fetch(DATA_BASE + "live.json" + _bust(), { cache: "no-store" })).json(); } catch { $("status").className = "stale"; $("status").textContent = "โหลดข้อมูลไม่ได้"; return; }
-    const age = Date.now() / 1000 - d.feed_time;
-    const fresh = age < 300;
-    $("status").className = fresh ? "ok" : "stale";
-    $("status").textContent = `อัปเดต ${new Date(d.feed_time * 1000).toLocaleTimeString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" })} (${Math.max(0, Math.round(age / 60))} นาทีก่อน)`;
-    if (d.account) $("acct").textContent = `Exness · Demo · Bal ${d.account.balance.toLocaleString("en-US", { minimumFractionDigits: 2 })} · Eq ${d.account.equity.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+    const at = d.updated_at || d.feed_time;
+    const thai = (x) => new Date(x * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    $("status").className = "ok";
+    $("status").textContent = `อัปเดตเมื่อมีไม้ปิด · ล่าสุด ${thai(at)} น. เวลาไทย`;
+    if (d.account) $("acct").textContent = `Exness · Demo · Balance ${d.account.balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     if (!sym) return;
     const cur = d.series[`${sym}|${tf}`];
     if (cur) for (const [t, o, h, l, c] of cur.bars) if (t >= lastTime) { series.update(toBar({ time: t, open: o, high: h, low: l, close: c })); lastTime = t; }
@@ -671,7 +672,7 @@ function renderTrades() {
 async function loadTrades() {
   try {
     const j = await (await fetch("/api/trades")).json();
-    trades = j.trades;
+    trades = _onlyClosed(j.trades);
   } catch { return; }
   renderTrades();
   drawAnalysis();  // position / pending lines and entry/exit marks follow the account

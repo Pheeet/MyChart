@@ -22,4 +22,11 @@ s = s.replace("</body>", "<script id=\"findmy-js\">\n" + js + "</script>\n</body
 assert 'id="findmy"' in s and 'id="findmy-js"' in s
 # dialog chart keeps a solid background (transparent canvas looks odd inside the modal)
 s = re.sub(r'(createChart\(\$\("d-chart"\), \{\s*autoSize: true,\s*layout: \{ background: \{ color: )C\.bg', r'\1"#121214"', s, count=1)
+
+# v3: click the focused trade again to unfocus (back to the normal view)
+OLD_CLICK = '$("trades").onclick = (e) => {\n  const b = e.target.closest(".trade");\n  if (b) focusTrade(tradeById(b.dataset.id));\n};'
+NEW_CLICK = '$("trades").onclick = (e) => {\n  const b = e.target.closest(".trade");\n  if (!b) return;\n  if (focusedId != null && String(b.dataset.id) === String(focusedId)) { focusedId = null; renderTrades(); applyTradeOverlays(); viewForTrades(); return; }  // findmy-unfocus\n  focusTrade(tradeById(b.dataset.id));\n};'
+if "findmy-unfocus" not in s:
+    if OLD_CLICK not in s: sys.exit("trade click handler not found")
+    s = s.replace(OLD_CLICK, NEW_CLICK, 1)
 SITE.write_text(s, encoding="utf-8"); print("themed", len(s))

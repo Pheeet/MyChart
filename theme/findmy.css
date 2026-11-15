@@ -133,3 +133,14 @@ dialog::backdrop { background: rgba(0,0,0,.45); -webkit-backdrop-filter: blur(6p
 }
 @media (min-width: 1024px) { main { left: 400px; } }
 @media (max-width: 1023px) { main { top: 104px; bottom: calc(52dvh - 14px); } }
+/* v3: sliding pill indicator (animated with Motion; plain CSS transition if the CDN fails) */
+.fm-has-pill { position: relative; }
+.fm-pill { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; border-radius: 7px; opacity: 0; will-change: transform, width;
+  background: #636366; box-shadow: 0 3px 8px rgba(0,0,0,.25), 0 0 0 .5px rgba(255,255,255,.06) inset; }
+html:not(.fm-motion) .fm-pill { transition: transform .28s cubic-bezier(.22,1,.36,1), width .28s cubic-bezier(.22,1,.36,1); }
+.toolbar .fm-pill { background: rgba(255,255,255,.18); }
+.fm-has-pill > button { position: relative; z-index: 1; }
+.fm-seg.fm-has-pill button[aria-selected="true"], .toolbar.fm-has-pill .tf[aria-pressed="true"] { background: transparent !important; box-shadow: none !important; color: #fff; }
+.trade { transition: background-color .18s ease; }
+/* v3: header without brand dot / "Pheeet" / avatar (user request 2026-11-15) */
+header .brand, header .brand::before, header .avatar, header > .divider { display: none !important; }

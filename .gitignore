@@ -1,3 +1,4 @@
 state/
 __pycache__/
 local_secrets.txt
+*.bak

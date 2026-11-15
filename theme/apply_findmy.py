@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Apply the Find My theme to site/index.html (idempotent). Revert: git checkout pre-findmy-20261115 -- site/index.html"""
+import re, sys
+from pathlib import Path
+HERE = Path(__file__).resolve().parent; SITE = HERE.parent / "site/index.html"
+s = SITE.read_text(encoding="utf-8")
+css = (HERE / "findmy.css").read_text(); js = (HERE / "findmy.js").read_text()
+s = re.sub(r"\n?<style id=\"findmy\">.*?</style>", "", s, flags=re.S)
+s = re.sub(r"\n?<script id=\"findmy-js\">.*?</script>", "", s, flags=re.S)
+# system font stack instead of web fonts
+s = re.sub(r'<link rel="stylesheet" href="https://fonts.googleapis.com/css2\?family=Space\+Grotesk[^"]*">', "", s)
+# Apple-style chart colours (canvas)
+OLD_C = re.compile(r'const C = \{ bg: "[^"]*", grid: "[^"]*", border: "[^"]*", fg: "[^"]*", muted: "[^"]*", up: "[^"]*", down: "[^"]*" \};')
+NEW_C = 'const C = { bg: "rgba(0,0,0,0)", grid: "rgba(255,255,255,0.045)", border: "rgba(255,255,255,0.10)", fg: "#f5f5f7", muted: "#8e8e93", up: "#30d158", down: "#ff453a" };'
+s, n = OLD_C.subn(NEW_C, s)
+if n != 1: sys.exit("chart colour line not found")
+s = s.replace('fontFamily: "IBM Plex Mono, monospace", fontSize: 11', 'fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Helvetica Neue, sans-serif", fontSize: 11')
+s = s.replace('rightPriceScale: { borderColor: C.border },\n  crosshair:', 'rightPriceScale: { borderColor: C.border, scaleMargins: { top: 0.16, bottom: 0.10 } },\n  crosshair:')
+s = s.replace('<meta name="viewport" content="width=device-width, initial-scale=1">', '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<meta name="theme-color" content="#0b0b0d">')
+s = s.replace("</style>\n</head>", "</style>\n<style id=\"findmy\">\n" + css + "</style>\n</head>", 1)
+s = s.replace("</body>", "<script id=\"findmy-js\">\n" + js + "</script>\n</body>", 1)
+assert 'id="findmy"' in s and 'id="findmy-js"' in s
+# dialog chart keeps a solid background (transparent canvas looks odd inside the modal)
+s = re.sub(r'(createChart\(\$\("d-chart"\), \{\s*autoSize: true,\s*layout: \{ background: \{ color: )C\.bg', r'\1"#121214"', s, count=1)
+SITE.write_text(s, encoding="utf-8"); print("themed", len(s))

@@ -98,3 +98,6 @@ for bad in bad_list + ["ai-review-btn\").onclick", "startJob"]:
         sys.exit(f"still contains {bad}")
 Path(__file__).with_name("site").joinpath("index.html").write_text(src, encoding="utf-8")
 print("site/index.html", len(src))
+# Find My theme (2026-11-15): re-apply on top of the regenerated page
+import subprocess as _sp
+_sp.run([sys.executable, str(Path(__file__).with_name("theme") / "apply_findmy.py")], check=True)

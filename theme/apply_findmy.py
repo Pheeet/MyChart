@@ -37,11 +37,11 @@ REAL_PATCHES = [
     ('fmtUsd(net) : "$0.00"', 'fmtUsd(net) : "0.00 USC"'),
     ('fmtUsd(gp) : "$0.00"', 'fmtUsd(gp) : "0.00 USC"'),
     ('fmtUsd(gl) : "$0.00"', 'fmtUsd(gl) : "0.00 USC"'),
-    ('<span class="acct mono" id="acct">Exness · Demo</span>', '<span class="acct mono" id="acct">Real · v1.07</span>'),
+    ('<span class="acct mono" id="acct">Exness · Demo</span>', '<span class="acct mono" id="acct">v1.07</span>'),
     ('$("acct").textContent = `Exness · Demo · Balance ${',
-     '$("acct").textContent = `Real · v1.07 · Balance ${'),
+     '$("acct").textContent = `v1.07 · Balance ${'),
     ('maximumFractionDigits: 2 })}`;', 'maximumFractionDigits: 2 })} USC`;'),
-    ('<span class="psum-badge">DEMO</span>', '<span class="psum-badge fm-real">REAL</span>'),
+    ('<span class="psum-badge">DEMO</span>', ''),
     ('const BOTS = { ', 'const BOTS = { 2026111503: "Rider v1.07R", '),
 ]
 if "findmy-real" not in s:
@@ -52,5 +52,11 @@ if "findmy-real" not in s:
 # v5 (2026-11-16): header without broker / account type / account number (pages built before v5)
 for a, b in [('id="acct">Exness · Real · Cent · v1.07</span>', 'id="acct">Real · v1.07</span>'),
              ('`Exness · Real · Cent · v1.07 · ···530 · Balance ${', '`Real · v1.07 · Balance ${')]:
+    s = s.replace(a, b)
+
+# v6 (2026-11-16): no "Real" anywhere visible, no account badge (pages built before v6)
+for a, b in [('id="acct">Real · v1.07</span>', 'id="acct">v1.07</span>'),
+             ('`Real · v1.07 · Balance ${', '`v1.07 · Balance ${'),
+             ('<span class="psum-badge fm-real">REAL</span>', '')]:
     s = s.replace(a, b)
 SITE.write_text(s, encoding="utf-8"); print("themed", len(s))

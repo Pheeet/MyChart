@@ -482,7 +482,7 @@ header .brand, header .brand::before, header .avatar, header > .divider { displa
   <div class="account">
     <span class="avatar">P</span>
     <span class="who">
-      <span class="acct mono" id="acct">Real · v1.07</span>
+      <span class="acct mono" id="acct">v1.07</span>
       <span id="status">กำลังเชื่อมต่อ…</span>
     </span>
   </div>
@@ -504,7 +504,7 @@ header .brand, header .brand::before, header .avatar, header > .divider { displa
     <section class="psum" aria-label="Profit Summary">
       <div class="psum-head">
         <h2>Profit Summary</h2>
-        <span class="psum-badge fm-real">REAL</span>
+        
       </div>
       <div class="psum-period">
         <span>Reporting Period</span>
@@ -667,7 +667,7 @@ function stream() {
     const thai = (x) => new Date(x * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
     $("status").className = "ok";
     $("status").textContent = `อัปเดตทุก 2 นาที · ล่าสุด ${thai(at)} น. เวลาไทย`;
-    if (d.account) $("acct").textContent = `Real · v1.07 · Balance ${d.account.balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USC`;
+    if (d.account) $("acct").textContent = `v1.07 · Balance ${d.account.balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USC`;
     if (!sym) return;
     const cur = d.series[`${sym}|${tf}`];
     if (cur) for (const [t, o, h, l, c] of cur.bars) if (t >= lastTime) { series.update(toBar({ time: t, open: o, high: h, low: l, close: c })); lastTime = t; }

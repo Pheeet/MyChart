@@ -8,7 +8,12 @@ deploys it to GitHub Pages. Account login / server are never exported.
 import hashlib, json, os, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 
-FEED = Path.home() / ".mt5chart/drive_c/Program Files/MT5 Chart/MQL5/Files/ChartFeed"
+# 2026-11-16: source switched from the ChartFeed demo terminal to the READ-ONLY RealFeed terminal (REAL cent, v1.07R).
+# Revert: set FEED back to the ChartFeed path below and REAL_MAGIC = None (or git checkout pre-real-20261116 -- publish.py).
+# FEED = Path.home() / ".mt5chart/drive_c/Program Files/MT5 Chart/MQL5/Files/ChartFeed"
+FEED = Path.home() / ".mt5realfeed/drive_c/Program Files/MT5 RealFeed/MQL5/Files/RealFeed"
+REAL_MAGIC = 2026111503          # publish only Diamond Rider v1.07R deals
+REAL_START = 1794680340          # 2026-11-15 01:19 Thai time (go-live); nothing earlier is published
 HERE = Path(__file__).resolve().parent
 STATE = HERE / "state"
 REMOTE = "https://github.com/Pheeet/MyChart.git"
@@ -102,13 +107,26 @@ def read_account():
         return None
 
 
+def check_feed():
+    if REAL_MAGIC is None:
+        return
+    p = (FEED / "account.txt").read_text(encoding="ascii", errors="ignore").strip().split("|")
+    if len(p) < 7 or p[2] != "0" or not p[0].endswith("530"):
+        raise SystemExit("refusing to publish: feed is not the real ···530 account")
+    if time.time() - (FEED / "account.txt").stat().st_mtime > 600:
+        raise SystemExit("refusing to publish: real feed stale (>10 min)")
+
+
 def build(out: Path):
+    check_feed()
     live = read_live()
     syms = sorted({k.split("|")[0] for k in live})
     feed_time = int((FEED / "live.txt").stat().st_mtime)
     files = {}
     files["symbols.json"] = {"symbols": syms}
     closed = [t for t in read_trades() if t["state"] == "closed"]  # open / pending never published
+    if REAL_MAGIC is not None:
+        closed = [t for t in closed if t["magic"] == REAL_MAGIC and t["open_t"] >= REAL_START]
     files["trades.json"] = {"trades": closed, "age": 0}
     for s in syms:
         for tf in TFS:

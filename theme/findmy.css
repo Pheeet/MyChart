@@ -144,3 +144,5 @@ html:not(.fm-motion) .fm-pill { transition: transform .28s cubic-bezier(.22,1,.3
 .trade { transition: background-color .18s ease; }
 /* v3: header without brand dot / "Pheeet" / avatar (user request 2026-11-15) */
 header .brand, header .brand::before, header .avatar, header > .divider { display: none !important; }
+/* v4: REAL badge (orange, Apple system orange) */
+.psum-badge.fm-real { color: #ff9f0a !important; background: rgba(255,159,10,.16) !important; border-color: rgba(255,159,10,.35) !important; }

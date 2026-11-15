@@ -29,4 +29,23 @@ NEW_CLICK = '$("trades").onclick = (e) => {\n  const b = e.target.closest(".trad
 if "findmy-unfocus" not in s:
     if OLD_CLICK not in s: sys.exit("trade click handler not found")
     s = s.replace(OLD_CLICK, NEW_CLICK, 1)
+
+# v4 (2026-11-16): page shows the REAL cent account ···530 (Diamond Rider v1.07R), amounts in USC, badge REAL.
+REAL_PATCHES = [
+    ('const fmtUsd = (v) => (v >= 0 ? "+$" : "-$") + Math.abs(v).toFixed(2);',
+     'const fmtUsd = (v) => (v >= 0 ? "+" : "-") + Math.abs(v).toFixed(2) + " USC";  // findmy-real'),
+    ('fmtUsd(net) : "$0.00"', 'fmtUsd(net) : "0.00 USC"'),
+    ('fmtUsd(gp) : "$0.00"', 'fmtUsd(gp) : "0.00 USC"'),
+    ('fmtUsd(gl) : "$0.00"', 'fmtUsd(gl) : "0.00 USC"'),
+    ('<span class="acct mono" id="acct">Exness · Demo</span>', '<span class="acct mono" id="acct">Exness · Real · Cent · v1.07</span>'),
+    ('$("acct").textContent = `Exness · Demo · Balance ${',
+     '$("acct").textContent = `Exness · Real · Cent · v1.07 · ···530 · Balance ${'),
+    ('maximumFractionDigits: 2 })}`;', 'maximumFractionDigits: 2 })} USC`;'),
+    ('<span class="psum-badge">DEMO</span>', '<span class="psum-badge fm-real">REAL</span>'),
+    ('const BOTS = { ', 'const BOTS = { 2026111503: "Rider v1.07R", '),
+]
+if "findmy-real" not in s:
+    for a, b in REAL_PATCHES:
+        if a not in s: sys.exit("real patch target not found: " + a[:60])
+        s = s.replace(a, b, 1)
 SITE.write_text(s, encoding="utf-8"); print("themed", len(s))

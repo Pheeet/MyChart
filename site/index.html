@@ -469,6 +469,8 @@ html:not(.fm-motion) .fm-pill { transition: transform .28s cubic-bezier(.22,1,.3
 .trade { transition: background-color .18s ease; }
 /* v3: header without brand dot / "Pheeet" / avatar (user request 2026-11-15) */
 header .brand, header .brand::before, header .avatar, header > .divider { display: none !important; }
+/* v4: REAL badge (orange, Apple system orange) */
+.psum-badge.fm-real { color: #ff9f0a !important; background: rgba(255,159,10,.16) !important; border-color: rgba(255,159,10,.35) !important; }
 </style>
 </head>
 <body>
@@ -480,7 +482,7 @@ header .brand, header .brand::before, header .avatar, header > .divider { displa
   <div class="account">
     <span class="avatar">P</span>
     <span class="who">
-      <span class="acct mono" id="acct">Exness · Demo</span>
+      <span class="acct mono" id="acct">Exness · Real · Cent · v1.07</span>
       <span id="status">กำลังเชื่อมต่อ…</span>
     </span>
   </div>
@@ -502,7 +504,7 @@ header .brand, header .brand::before, header .avatar, header > .divider { displa
     <section class="psum" aria-label="Profit Summary">
       <div class="psum-head">
         <h2>Profit Summary</h2>
-        <span class="psum-badge">DEMO</span>
+        <span class="psum-badge fm-real">REAL</span>
       </div>
       <div class="psum-period">
         <span>Reporting Period</span>
@@ -665,7 +667,7 @@ function stream() {
     const thai = (x) => new Date(x * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
     $("status").className = "ok";
     $("status").textContent = `อัปเดตทุก 2 นาที · ล่าสุด ${thai(at)} น. เวลาไทย`;
-    if (d.account) $("acct").textContent = `Exness · Demo · Balance ${d.account.balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (d.account) $("acct").textContent = `Exness · Real · Cent · v1.07 · ···530 · Balance ${d.account.balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USC`;
     if (!sym) return;
     const cur = d.series[`${sym}|${tf}`];
     if (cur) for (const [t, o, h, l, c] of cur.bars) if (t >= lastTime) { series.update(toBar({ time: t, open: o, high: h, low: l, close: c })); lastTime = t; }
@@ -684,12 +686,12 @@ function stream() {
 }
 
 // ---- Order History (real positions of the account: closed in the last 30 days + open now) ----
-const BOTS = { 2026111001: "Rider", 2026111101: "Catcher", 2026111201: "Asia", 2026110701: "PheeetTrend", 2026102901: "Pheeet AI", 2026102802: "Ngern", 2026102801: "mc", 2026100601: "FlyIndex", 2026100602: "FlyBTC", 2026100501: "Stonkfly", 2026101901: "DOBBY", 463001: "SignalScalper", 0: "Manual" };
+const BOTS = { 2026111503: "Rider v1.07R", 2026111001: "Rider", 2026111101: "Catcher", 2026111201: "Asia", 2026110701: "PheeetTrend", 2026102901: "Pheeet AI", 2026102802: "Ngern", 2026102801: "mc", 2026100601: "FlyIndex", 2026100602: "FlyBTC", 2026100501: "Stonkfly", 2026101901: "DOBBY", 463001: "SignalScalper", 0: "Manual" };
 const botName = (t) => BOTS[t.magic] ?? (t.magic >= 8000 && t.magic < 8100 ? "Asgard Gold" : t.comment || `Magic ${t.magic}`);
 const REASON = { SL: "ชน SL", TP: "ชน TP", SO: "Stop out", EA: "บอทปิด", MANUAL: "ปิดเอง" };
 const fmtTime = (t) => new Date(t * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const fmtPx = (v, d) => v ? v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }) : "–";
-const fmtUsd = (v) => (v >= 0 ? "+$" : "-$") + Math.abs(v).toFixed(2);
+const fmtUsd = (v) => (v >= 0 ? "+" : "-") + Math.abs(v).toFixed(2) + " USC";  // findmy-real
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 function fmtDur(sec) {
   const m = Math.round(sec / 60);
@@ -768,14 +770,14 @@ function renderSummary() {
   for (const b of document.querySelectorAll("#psum-dd-menu [data-period]"))
     b.setAttribute("aria-selected", b.dataset.period === period ? "true" : "false");
   const netEl = $("psum-net"), card = $("psum-net-card");
-  netEl.textContent = n || net ? fmtUsd(net) : "$0.00";
+  netEl.textContent = n || net ? fmtUsd(net) : "0.00 USC";
   netEl.className = "val " + (net > 0 ? "pos" : net < 0 ? "neg" : "");
   card.className = "psum-net" + (net > 0 ? "" : net < 0 ? " neg" : " flat");
   const wr = n ? (wins.length / n * 100) : 0;
   $("psum-wr").textContent = n ? wr.toFixed(1) + "%" : "—";
   $("psum-pf").textContent = gl < 0 ? (gp / -gl).toFixed(2) : (gp > 0 ? "∞" : "—");
-  $("psum-gp").textContent = gp ? fmtUsd(gp) : "$0.00";
-  $("psum-gl").textContent = gl ? fmtUsd(gl) : "$0.00";
+  $("psum-gp").textContent = gp ? fmtUsd(gp) : "0.00 USC";
+  $("psum-gl").textContent = gl ? fmtUsd(gl) : "0.00 USC";
   $("psum-wins").textContent = String(wins.length);
   $("psum-losses").textContent = String(losses.length);
   $("psum-bar").style.width = (n ? wr : 0) + "%";

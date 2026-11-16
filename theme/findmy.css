@@ -146,3 +146,29 @@ html:not(.fm-motion) .fm-pill { transition: transform .28s cubic-bezier(.22,1,.3
 header .brand, header .brand::before, header .avatar, header > .divider { display: none !important; }
 /* v4: REAL badge (orange, Apple system orange) */
 .psum-badge.fm-real { color: #ff9f0a !important; background: rgba(255,159,10,.16) !important; border-color: rgba(255,159,10,.35) !important; }
+/* v7 (2026-11-16): market regime pill, right under the price bar (right-aligned, same row as M1/M15) */
+#fm-regime { position: fixed; z-index: 19; top: 80px; right: 16px; width: max-content; display: grid; grid-template-columns: auto auto; align-items: center; gap: 3px 10px;
+  max-width: min(440px, calc(100% - 560px)); padding: 7px 14px 7px 12px; border-radius: 12px; cursor: pointer; font-family: var(--font-display); }
+#fm-regime[hidden] { display: none; }
+#fm-regime .rg-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: #8e8e93; }
+#fm-regime .rg-main { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+#fm-regime .rg-label { font: 700 14px var(--font-display); letter-spacing: -0.01em; }
+#fm-regime .rg-nums { font: 500 11.5px var(--font-mono); color: #c7c7cc; font-variant-numeric: tabular-nums; }
+#fm-regime .rg-sub { grid-column: 2; font: 500 10.5px var(--font-display); color: var(--muted-foreground); white-space: nowrap; }
+#fm-regime[data-k="up"] .rg-dot { background: #30d158; box-shadow: 0 0 0 3px rgba(48,209,88,.2); }
+#fm-regime[data-k="up"] .rg-label { color: #30d158; }
+#fm-regime[data-k="down"] .rg-dot { background: #ff453a; box-shadow: 0 0 0 3px rgba(255,69,58,.2); }
+#fm-regime[data-k="down"] .rg-label { color: #ff453a; }
+#fm-regime[data-k="range"] .rg-dot { background: #ff9f0a; box-shadow: 0 0 0 3px rgba(255,159,10,.2); }
+#fm-regime[data-k="range"] .rg-label { color: #ff9f0a; }
+#fm-regime[data-k="quiet"] .rg-dot { background: #8e8e93; box-shadow: 0 0 0 3px rgba(142,142,147,.2); }
+#fm-regime[data-k="quiet"] .rg-label { color: #aeaeb2; }
+@media (min-width: 1024px) and (max-width: 1180px) { #fm-regime { max-width: 300px; } #fm-regime .rg-sub { white-space: normal; } }
+@media (max-width: 1023px) {
+  #fm-regime { top: 66px; right: 10px; max-width: calc(100% - 150px); min-height: 32px; box-sizing: border-box; padding: 5px 11px 5px 10px; border-radius: 10px; gap: 2px 8px; align-content: center; }
+  #fm-regime .rg-sub { display: none; white-space: normal; }
+  #fm-regime.open .rg-sub { display: block; }
+  #fm-regime .rg-label { font-size: 13px; }
+  #fm-regime .rg-nums { font-size: 10.5px; }
+}
+@media (max-width: 380px) { #fm-regime .rg-nums { font-size: 9.5px; } }

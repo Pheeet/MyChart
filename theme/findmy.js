@@ -68,3 +68,28 @@
     rows.forEach((r, i) => animate(r, { opacity: [0, 1], transform: ["translateY(6px)", "translateY(0px)"] }, { duration: 0.26, delay: i * 0.018, ease: [0.22, 1, 0.36, 1] }));
   }).observe(menu, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
 })();
+// ===== v7 (2026-11-16): market regime pill under the price bar (data/live.json -> regime, computed by regime.py) =====
+(() => {
+  const el = document.createElement("div"); el.id = "fm-regime"; el.className = "glass"; el.hidden = true;
+  el.innerHTML = '<span class="rg-dot"></span><span class="rg-main"><b class="rg-label"></b><span class="rg-nums"></span></span><span class="rg-sub"></span>';
+  document.body.appendChild(el);
+  const ARW = { up: "↑", down: "↓", flat: "→", none: "–" };
+  const COL = { up: "up", down: "down", range: "range", quiet: "quiet" };
+  const thai = (x) => new Date(x * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" });
+  const q = (s) => el.querySelector(s);
+  async function tick() {
+    let r;
+    try { r = (await (await fetch("data/live.json?t=" + Math.floor(Date.now() / 30000), { cache: "no-store" })).json()).regime; } catch { return; }
+    if (!r) { el.hidden = true; return; }
+    el.hidden = false; el.dataset.k = COL[r.k] || "range";
+    q(".rg-label").textContent = r.label;
+    q(".rg-nums").textContent = `ADX ${Math.round(r.adx_h4)} · ER ${r.er.toFixed(2)} · CHOP ${Math.round(r.chop)}`;
+    q(".rg-sub").textContent = `H4 ${ARW[r.ema_slope] || "–"} · M15 ${ARW[r.m15] || "–"} · อ้างอิงอดีต ไม่ใช่การทำนาย`;
+    el.title = `สภาพตลาด (แท่ง H1 ปิด ${thai(r.as_of)} น.)\n` +
+      `ADX14 H4 ${r.adx_h4} (+DI ${r.pdi} / −DI ${r.mdi}) · ADX14 H1 ${r.adx_h1}\n` +
+      `ER20 H1 ${r.er} · CHOP14 H1 ${r.chop} · ATR H1 / ค่ากลาง 7 วัน ${r.atr_ratio}\n` +
+      `เทรนด์: ADX H4 ≥ 25 และ (ER ≥ 0.30 หรือ CHOP < 38.2) · เงียบ: ATR < 0.6× ค่ากลาง · นอกนั้น = แกว่ง`;
+  }
+  el.addEventListener("click", () => el.classList.toggle("open"));
+  tick(); setInterval(tick, 60000);
+})();

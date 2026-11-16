@@ -135,7 +135,12 @@ def build(out: Path):
                 bars = [bar(x) for x in f.read_text(encoding="ascii").split() if x.count(",") == 5]
                 files[f"bars/{s}_{tf}.json"] = {"digits": live.get(f"{s}|{tf}", {}).get("digits", 5), "bars": bars}
     acct = read_account()
-    files["live.json"] = {"series": live, "account": {"balance": acct["balance"]} if acct else None,
+    try:  # 2026-11-16 market regime (trend / range / quiet) from closed BTCUSDc M15 bars; never blocks publishing
+        import regime
+        rg = regime.compute(files.get("bars/BTCUSDc_M15.json", {}).get("bars", []))
+    except Exception as e:
+        print("regime failed:", e); rg = None
+    files["live.json"] = {"series": live, "account": {"balance": acct["balance"]} if acct else None, "regime": rg,
                           "feed_time": feed_time, "updated_at": int(time.time()),
                           "last_close": max((t["close_t"] for t in closed), default=0)}
     (out / "data/bars").mkdir(parents=True)

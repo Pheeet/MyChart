@@ -471,6 +471,32 @@ html:not(.fm-motion) .fm-pill { transition: transform .28s cubic-bezier(.22,1,.3
 header .brand, header .brand::before, header .avatar, header > .divider { display: none !important; }
 /* v4: REAL badge (orange, Apple system orange) */
 .psum-badge.fm-real { color: #ff9f0a !important; background: rgba(255,159,10,.16) !important; border-color: rgba(255,159,10,.35) !important; }
+/* v7 (2026-11-16): market regime pill, right under the price bar (right-aligned, same row as M1/M15) */
+#fm-regime { position: fixed; z-index: 19; top: 80px; right: 16px; width: max-content; display: grid; grid-template-columns: auto auto; align-items: center; gap: 3px 10px;
+  max-width: min(440px, calc(100% - 560px)); padding: 7px 14px 7px 12px; border-radius: 12px; cursor: pointer; font-family: var(--font-display); }
+#fm-regime[hidden] { display: none; }
+#fm-regime .rg-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: #8e8e93; }
+#fm-regime .rg-main { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+#fm-regime .rg-label { font: 700 14px var(--font-display); letter-spacing: -0.01em; }
+#fm-regime .rg-nums { font: 500 11.5px var(--font-mono); color: #c7c7cc; font-variant-numeric: tabular-nums; }
+#fm-regime .rg-sub { grid-column: 2; font: 500 10.5px var(--font-display); color: var(--muted-foreground); white-space: nowrap; }
+#fm-regime[data-k="up"] .rg-dot { background: #30d158; box-shadow: 0 0 0 3px rgba(48,209,88,.2); }
+#fm-regime[data-k="up"] .rg-label { color: #30d158; }
+#fm-regime[data-k="down"] .rg-dot { background: #ff453a; box-shadow: 0 0 0 3px rgba(255,69,58,.2); }
+#fm-regime[data-k="down"] .rg-label { color: #ff453a; }
+#fm-regime[data-k="range"] .rg-dot { background: #ff9f0a; box-shadow: 0 0 0 3px rgba(255,159,10,.2); }
+#fm-regime[data-k="range"] .rg-label { color: #ff9f0a; }
+#fm-regime[data-k="quiet"] .rg-dot { background: #8e8e93; box-shadow: 0 0 0 3px rgba(142,142,147,.2); }
+#fm-regime[data-k="quiet"] .rg-label { color: #aeaeb2; }
+@media (min-width: 1024px) and (max-width: 1180px) { #fm-regime { max-width: 300px; } #fm-regime .rg-sub { white-space: normal; } }
+@media (max-width: 1023px) {
+  #fm-regime { top: 66px; right: 10px; max-width: calc(100% - 150px); min-height: 32px; box-sizing: border-box; padding: 5px 11px 5px 10px; border-radius: 10px; gap: 2px 8px; align-content: center; }
+  #fm-regime .rg-sub { display: none; white-space: normal; }
+  #fm-regime.open .rg-sub { display: block; }
+  #fm-regime .rg-label { font-size: 13px; }
+  #fm-regime .rg-nums { font-size: 10.5px; }
+}
+@media (max-width: 380px) { #fm-regime .rg-nums { font-size: 9.5px; } }
 </style>
 </head>
 <body>
@@ -1445,6 +1471,31 @@ async function refreshAnalysis() {}
     const rows = [...document.querySelectorAll("#trades .trade")].slice(0, 12);
     rows.forEach((r, i) => animate(r, { opacity: [0, 1], transform: ["translateY(6px)", "translateY(0px)"] }, { duration: 0.26, delay: i * 0.018, ease: [0.22, 1, 0.36, 1] }));
   }).observe(menu, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
+})();
+// ===== v7 (2026-11-16): market regime pill under the price bar (data/live.json -> regime, computed by regime.py) =====
+(() => {
+  const el = document.createElement("div"); el.id = "fm-regime"; el.className = "glass"; el.hidden = true;
+  el.innerHTML = '<span class="rg-dot"></span><span class="rg-main"><b class="rg-label"></b><span class="rg-nums"></span></span><span class="rg-sub"></span>';
+  document.body.appendChild(el);
+  const ARW = { up: "↑", down: "↓", flat: "→", none: "–" };
+  const COL = { up: "up", down: "down", range: "range", quiet: "quiet" };
+  const thai = (x) => new Date(x * 1000).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" });
+  const q = (s) => el.querySelector(s);
+  async function tick() {
+    let r;
+    try { r = (await (await fetch("data/live.json?t=" + Math.floor(Date.now() / 30000), { cache: "no-store" })).json()).regime; } catch { return; }
+    if (!r) { el.hidden = true; return; }
+    el.hidden = false; el.dataset.k = COL[r.k] || "range";
+    q(".rg-label").textContent = r.label;
+    q(".rg-nums").textContent = `ADX ${Math.round(r.adx_h4)} · ER ${r.er.toFixed(2)} · CHOP ${Math.round(r.chop)}`;
+    q(".rg-sub").textContent = `H4 ${ARW[r.ema_slope] || "–"} · M15 ${ARW[r.m15] || "–"} · อ้างอิงอดีต ไม่ใช่การทำนาย`;
+    el.title = `สภาพตลาด (แท่ง H1 ปิด ${thai(r.as_of)} น.)\n` +
+      `ADX14 H4 ${r.adx_h4} (+DI ${r.pdi} / −DI ${r.mdi}) · ADX14 H1 ${r.adx_h1}\n` +
+      `ER20 H1 ${r.er} · CHOP14 H1 ${r.chop} · ATR H1 / ค่ากลาง 7 วัน ${r.atr_ratio}\n` +
+      `เทรนด์: ADX H4 ≥ 25 และ (ER ≥ 0.30 หรือ CHOP < 38.2) · เงียบ: ATR < 0.6× ค่ากลาง · นอกนั้น = แกว่ง`;
+  }
+  el.addEventListener("click", () => el.classList.toggle("open"));
+  tick(); setInterval(tick, 60000);
 })();
 </script>
 </body>

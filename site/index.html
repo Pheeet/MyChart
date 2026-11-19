@@ -497,6 +497,31 @@ header .brand, header .brand::before, header .avatar, header > .divider { displa
   #fm-regime .rg-nums { font-size: 10.5px; }
 }
 @media (max-width: 380px) { #fm-regime .rg-nums { font-size: 9.5px; } }
+
+/* v8 (2026-11-19): Trendlines with Breaks toggle + attribution footnote */
+#fm-tl-toggle {
+  position: fixed; z-index: 19; top: 80px; padding: 0 12px; border-radius: 10px;
+  font: 600 12px var(--font-display); color: #c7c7cc; letter-spacing: 0;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-sizing: border-box;
+}
+#fm-tl-toggle:hover { color: #fff; background: rgba(28,28,30,.78); }
+#fm-tl-toggle[aria-pressed="true"] { color: #fff; }
+#fm-tl-toggle .fm-tl-swatch {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: linear-gradient(180deg, #26A69A 50%, #EF5350 50%);
+  box-shadow: 0 0 0 2px rgba(38,166,154,.18);
+}
+#fm-tl-note {
+  position: fixed; z-index: 18; bottom: 18px; right: 64px;
+  font: 500 10px var(--font-display); color: rgba(174,174,178,.92);
+  pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.65); white-space: nowrap;
+}
+#fm-tl-note[hidden] { display: none; }
+@media (max-width: 1023px) {
+  #fm-tl-toggle { top: 66px; }
+  #fm-tl-note { bottom: auto; top: 104px; right: 10px; left: auto; font-size: 9px; max-width: 52vw;
+    white-space: normal; text-align: right; }
+}
 </style>
 </head>
 <body>
@@ -1401,6 +1426,225 @@ async function refreshAnalysis() {}
   stream();
 })();
 </script>
+<script id="luxtl-js">
+// LuxAlgo "Trendlines with Breaks" (Pine v5) — faithful JS port of ~/dd/luxtl/luxtl.py.
+// Default: length=14, mult=1, slope = ATR(length)/length*mult (Wilder / Pine ta.atr).
+// Indicator © LuxAlgo, licensed CC BY-NC-SA 4.0 — https://creativecommons.org/licenses/by-nc-sa/4.0/
+// This file is a research/display port, not an official LuxAlgo release.
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory();
+  else root.LuxTL = factory();
+})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  const LENGTH = 14;
+  const MULT = 1.0;
+  // Up-trendline (rising from a pivot low) = teal; down-trendline (falling from a pivot high) = red.
+  // Matches the real-time (non-backpainted) reading of the indicator, not the Pine input label names.
+  const TEAL = "#26A69A";
+  const RED = "#EF5350";
+
+  function wilderAtr(h, l, c, n) {
+    const m = c.length;
+    const atr = new Float64Array(m);
+    atr.fill(NaN);
+    if (!m) return atr;
+    const tr = new Float64Array(m);
+    tr[0] = h[0] - l[0];
+    for (let i = 1; i < m; i++) {
+      tr[i] = Math.max(h[i] - l[i], Math.abs(h[i] - c[i - 1]), Math.abs(l[i] - c[i - 1]));
+    }
+    if (m < n) return atr;
+    let prev = 0;
+    for (let i = 0; i < n; i++) prev += tr[i];
+    prev /= n;
+    atr[n - 1] = prev;
+    for (let i = n; i < m; i++) {
+      prev = (prev * (n - 1) + tr[i]) / n;
+      atr[i] = prev;
+    }
+    return atr;
+  }
+
+  function pivots(h, l, length) {
+    const m = h.length;
+    const ph = new Float64Array(m);
+    const pl = new Float64Array(m);
+    ph.fill(NaN);
+    pl.fill(NaN);
+    const L = length;
+    for (let i = 2 * L; i < m; i++) {
+      const p = i - L;
+      const hp = h[p], lp = l[p];
+      let isH = true, isL = true;
+      for (let j = 1; j <= L; j++) {
+        if (h[p - j] >= hp || h[p + j] >= hp) isH = false;
+        if (l[p - j] <= lp || l[p + j] <= lp) isL = false;
+        if (!isH && !isL) break;
+      }
+      if (isH) ph[i] = hp;
+      if (isL) pl[i] = lp;
+    }
+    return { ph, pl };
+  }
+
+  function compute(h, l, c, length, mult) {
+    if (length == null) length = LENGTH;
+    if (mult == null) mult = MULT;
+    const m = c.length;
+    const atr = wilderAtr(h, l, c, length);
+    const { ph, pl } = pivots(h, l, length);
+    const slope = new Float64Array(m);
+    for (let i = 0; i < m; i++) slope[i] = atr[i] / length * mult;
+
+    const upper = new Float64Array(m); upper.fill(NaN);
+    const lower = new Float64Array(m); lower.fill(NaN);
+    const slopePh = new Float64Array(m); slopePh.fill(NaN);
+    const slopePl = new Float64Array(m); slopePl.fill(NaN);
+    const upos = new Int8Array(m);
+    const dnos = new Int8Array(m);
+
+    let sph = 0, spl = 0, u = 0, lo = 0;
+    let havePh = false, havePl = false, uo = 0, dn = 0;
+    for (let i = 0; i < m; i++) {
+      const pvh = Number.isFinite(ph[i]);
+      const pvl = Number.isFinite(pl[i]);
+      const sl = slope[i];
+      if (pvh && Number.isFinite(sl)) {
+        sph = sl;
+        u = ph[i];
+        havePh = true;
+        uo = 0;
+      } else if (havePh) {
+        u = u - sph;
+      }
+      if (pvl && Number.isFinite(sl)) {
+        spl = sl;
+        lo = pl[i];
+        havePl = true;
+        dn = 0;
+      } else if (havePl) {
+        lo = lo + spl;
+      }
+      if (havePh) {
+        upper[i] = u;
+        slopePh[i] = sph;
+        if (!pvh && c[i] > (u - sph * length)) uo = 1;
+      }
+      if (havePl) {
+        lower[i] = lo;
+        slopePl[i] = spl;
+        if (!pvl && c[i] < (lo + spl * length)) dn = 1;
+      }
+      upos[i] = uo;
+      dnos[i] = dn;
+    }
+
+    const upperRt = new Float64Array(m);
+    const lowerRt = new Float64Array(m);
+    for (let i = 0; i < m; i++) {
+      upperRt[i] = upper[i] - slopePh[i] * length;
+      lowerRt[i] = lower[i] + slopePl[i] * length;
+    }
+    const upBreak = new Array(m).fill(false);
+    const dnBreak = new Array(m).fill(false);
+    for (let i = 1; i < m; i++) {
+      upBreak[i] = upos[i] === 1 && upos[i - 1] === 0;
+      dnBreak[i] = dnos[i] === 1 && dnos[i - 1] === 0;
+    }
+    return {
+      atr, ph, pl, upper, lower,
+      slope_ph: slopePh, slope_pl: slopePl,
+      upper_rt: upperRt, lower_rt: lowerRt,
+      upos, dnos, up_break: upBreak, dn_break: dnBreak,
+    };
+  }
+
+  function finiteArr(a) {
+    const out = new Array(a.length);
+    for (let i = 0; i < a.length; i++) out[i] = Number.isFinite(a[i]) ? a[i] : null;
+    return out;
+  }
+
+  // Pack a render model from OHLC bars: {time, high, low, close} (time already in chart space).
+  function model(bars, length, mult) {
+    if (length == null) length = LENGTH;
+    if (mult == null) mult = MULT;
+    const m = bars ? bars.length : 0;
+    const empty = { segs: [], faint: [], ext: [], breaks: [] };
+    if (!m) return empty;
+    const h = new Float64Array(m), l = new Float64Array(m), c = new Float64Array(m), t = new Array(m);
+    for (let i = 0; i < m; i++) {
+      h[i] = bars[i].high; l[i] = bars[i].low; c[i] = bars[i].close; t[i] = bars[i].time;
+    }
+    const R = compute(h, l, c, length, mult);
+
+    function segsFrom(values, skip) {
+      const segs = [];
+      let cur = null;
+      for (let i = 0; i < m; i++) {
+        if (!Number.isFinite(values[i]) || skip[i]) {
+          if (cur && cur.length >= 2) segs.push(cur);
+          cur = null;
+          continue;
+        }
+        if (!cur) cur = [];
+        cur.push({ t: t[i], p: values[i] });
+      }
+      if (cur && cur.length >= 2) segs.push(cur);
+      return segs;
+    }
+
+    const skipU = new Array(m), skipL = new Array(m);
+    for (let i = 0; i < m; i++) {
+      skipU[i] = Number.isFinite(R.ph[i]);
+      skipL[i] = Number.isFinite(R.pl[i]);
+    }
+    const segs = [];
+    for (const s of segsFrom(R.upper_rt, skipU)) segs.push({ color: RED, points: s });
+    for (const s of segsFrom(R.lower_rt, skipL)) segs.push({ color: TEAL, points: s });
+
+    const faint = [];
+    for (let i = 0; i < m; i++) {
+      if (Number.isFinite(R.ph[i]) && i >= length) {
+        faint.push({ color: RED, points: [
+          { t: t[i - length], p: R.ph[i] },
+          { t: t[i], p: R.upper_rt[i] },
+        ]});
+      }
+      if (Number.isFinite(R.pl[i]) && i >= length) {
+        faint.push({ color: TEAL, points: [
+          { t: t[i - length], p: R.pl[i] },
+          { t: t[i], p: R.lower_rt[i] },
+        ]});
+      }
+    }
+
+    const ext = [];
+    const dt = m >= 2 ? (t[m - 1] - t[m - 2]) : 0;
+    function lastExt(values, slopes, dir, color, skip) {
+      for (let i = m - 1; i >= 0; i--) {
+        if (Number.isFinite(values[i]) && Number.isFinite(slopes[i])) {
+          ext.push({ t: t[i], p: values[i], slope: slopes[i] * dir, dt, color, gap: !!skip[i] });
+          return;
+        }
+      }
+    }
+    lastExt(R.upper_rt, R.slope_ph, -1, RED, skipU);
+    lastExt(R.lower_rt, R.slope_pl, +1, TEAL, skipL);
+
+    const breaks = [];
+    for (let i = 0; i < m; i++) {
+      if (R.up_break[i]) breaks.push({ t: t[i], p: bars[i].low, dir: "up", color: TEAL });
+      if (R.dn_break[i]) breaks.push({ t: t[i], p: bars[i].high, dir: "down", color: RED });
+    }
+    return { segs, faint, ext, breaks };
+  }
+
+  return {
+    LENGTH, MULT, TEAL, RED,
+    wilderAtr, pivots, compute, model, finiteArr,
+  };
+});
+</script>
 <script id="findmy-js">
 // ===== Find My theme helpers (2026-11-15): segmented period control + bottom sheet. Uses the existing menu, no data changes. =====
 (() => {
@@ -1496,6 +1740,187 @@ async function refreshAnalysis() {}
   }
   el.addEventListener("click", () => el.classList.toggle("open"));
   tick(); setInterval(tick, 60000);
+})();
+
+// ===== v8 (2026-11-19): LuxAlgo Trendlines with Breaks, real-time (no backpaint), on the main chart =====
+(() => {
+  if (typeof series === "undefined" || typeof chart === "undefined" || typeof LuxTL === "undefined") return;
+
+  const KEY = "mychart-tl";
+  const CREDIT = "Trendlines with Breaks © LuxAlgo · CC BY-NC-SA 4.0";
+  const shown = () => { try { return localStorage.getItem(KEY) !== "0"; } catch { return true; } };
+  const save = (on) => { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch {} };
+
+  const prim = {
+    model: { segs: [], faint: [], ext: [], breaks: [] },
+    visible: shown(),
+    series: null, chart: null, req: null,
+    attached(p) { this.chart = p.chart; this.series = p.series; this.req = p.requestUpdate; },
+    detached() { this.chart = this.series = this.req = null; },
+    set(model) { this.model = model || { segs: [], faint: [], ext: [], breaks: [] }; this.req && this.req(); },
+    updateAllViews() {},
+    paneViews() {
+      const self = this;
+      return [
+        { zOrder: () => "normal", renderer: () => ({ draw(target) { self._drawLines(target); } }) },
+        { zOrder: () => "top", renderer: () => ({ draw(target) { self._drawBreaks(target); } }) },
+      ];
+    },
+    _xy(ts, t, p) {
+      const x = ts.timeToCoordinate(t), y = this.series.priceToCoordinate(p);
+      return [x, y];
+    },
+    _stroke(ctx, hr, vr, points, color, width, dash, alpha) {
+      const ts = this.chart.timeScale();
+      const pts = [];
+      for (const q of points) {
+        const [x, y] = this._xy(ts, q.t, q.p);
+        if (x == null || y == null) continue;
+        pts.push([x * hr, y * vr]);
+      }
+      if (pts.length < 2) return;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = Math.max(1, width * hr);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.setLineDash(dash ? dash.map((d) => d * hr) : []);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.stroke();
+      ctx.restore();
+    },
+    _drawLines(target) {
+      if (!this.visible || !this.chart || !this.series) return;
+      target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, horizontalPixelRatio: hr, verticalPixelRatio: vr }) => {
+        const ts = this.chart.timeScale();
+        for (const s of this.model.faint || []) this._stroke(ctx, hr, vr, s.points, s.color, 1, [5, 5], 0.32);
+        for (const s of this.model.segs || []) this._stroke(ctx, hr, vr, s.points, s.color, 1.7, null, 0.95);
+        const mediaW = bitmapSize.width / hr;
+        for (const e of this.model.ext || []) {
+          const [x0, y0] = this._xy(ts, e.t, e.p);
+          if (x0 == null || y0 == null) continue;
+          let barW = 0;
+          if (e.dt) {
+            const x1 = ts.timeToCoordinate(e.t + e.dt);
+            if (x1 != null) barW = x1 - x0;
+          }
+          if (!(barW > 0.2)) barW = 8;
+          const xR = mediaW + 2;
+          if (xR <= x0 + 1) continue;
+          const nBars = (xR - x0) / barW;
+          const pR = e.p + e.slope * nBars;
+          const yR = this.series.priceToCoordinate(pR);
+          if (yR == null) continue;
+          ctx.save();
+          ctx.strokeStyle = e.color;
+          ctx.globalAlpha = 0.8;
+          ctx.lineWidth = Math.max(1, 1.3 * hr);
+          ctx.setLineDash([6 * hr, 5 * hr]);
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(x0 * hr, y0 * vr);
+          ctx.lineTo(xR * hr, yR * vr);
+          ctx.stroke();
+          ctx.restore();
+        }
+      });
+    },
+    _drawBreaks(target) {
+      if (!this.visible || !this.chart || !this.series) return;
+      target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, horizontalPixelRatio: hr, verticalPixelRatio: vr }) => {
+        const ts = this.chart.timeScale();
+        const mediaW = bitmapSize.width / hr, mediaH = bitmapSize.height / vr;
+        ctx.font = `700 ${11 * vr}px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        for (const b of this.model.breaks || []) {
+          const [x, y] = this._xy(ts, b.t, b.p);
+          if (x == null || y == null) continue;
+          if (x < -20 || x > mediaW + 20) continue;
+          const up = b.dir === "up";
+          const tw = ctx.measureText("B").width;
+          const padX = 4.5 * hr, padY = 2.2 * vr;
+          const w = tw + padX * 2, h = 11 * vr + padY * 2;
+          const cx = x * hr;
+          let top = up ? (y * vr + 7 * vr) : (y * vr - 7 * vr - h);
+          let left = cx - w / 2;
+          left = Math.max(2 * hr, Math.min(left, bitmapSize.width - w - 2 * hr));
+          if (top < 2 * vr) top = 2 * vr;
+          if (top + h > bitmapSize.height - 2 * vr) top = bitmapSize.height - h - 2 * vr;
+          const r = 3 * Math.max(hr, vr);
+          ctx.beginPath();
+          const x0 = left, y0 = top, x1 = left + w, y1 = top + h;
+          ctx.moveTo(x0 + r, y0); ctx.lineTo(x1 - r, y0); ctx.quadraticCurveTo(x1, y0, x1, y0 + r);
+          ctx.lineTo(x1, y1 - r); ctx.quadraticCurveTo(x1, y1, x1 - r, y1);
+          ctx.lineTo(x0 + r, y1); ctx.quadraticCurveTo(x0, y1, x0, y1 - r);
+          ctx.lineTo(x0, y0 + r); ctx.quadraticCurveTo(x0, y0, x0 + r, y0);
+          ctx.closePath();
+          ctx.fillStyle = b.color;
+          ctx.fill();
+          ctx.fillStyle = "#fff";
+          ctx.fillText("B", x0 + w / 2, y0 + h / 2 + 0.3 * vr);
+        }
+      });
+    },
+  };
+  series.attachPrimitive(prim);
+
+  let bars = [];
+  const origSet = series.setData.bind(series);
+  const origUpd = series.update.bind(series);
+  function refresh() {
+    prim.set(LuxTL.model(bars));
+  }
+  series.setData = (data) => {
+    bars = Array.isArray(data) ? data.map((b) => ({ time: b.time, high: b.high, low: b.low, close: b.close })) : [];
+    origSet(data);
+    refresh();
+  };
+  series.update = (bar) => {
+    if (bar && bar.time != null) {
+      const last = bars.length ? bars[bars.length - 1] : null;
+      if (last && last.time === bar.time) bars[bars.length - 1] = { time: bar.time, high: bar.high, low: bar.low, close: bar.close };
+      else if (!last || bar.time > last.time) bars.push({ time: bar.time, high: bar.high, low: bar.low, close: bar.close });
+    }
+    origUpd(bar);
+    refresh();
+  };
+
+  const tb = document.querySelector(".toolbar");
+  const btn = document.createElement("button");
+  btn.id = "fm-tl-toggle";
+  btn.type = "button";
+  btn.className = "glass";
+  btn.title = CREDIT + " — เส้นจริง ไม่วาดย้อนหลัง (ป้าย B = ราคาปิดทะลุเส้น)";
+  btn.setAttribute("aria-label", "แสดงหรือซ่อนเส้นแนวโน้ม LuxAlgo");
+  btn.innerHTML = '<span class="fm-tl-swatch" aria-hidden="true"></span><span>เส้น</span>';
+  const note = document.createElement("div");
+  note.id = "fm-tl-note";
+  note.textContent = CREDIT;
+  const syncUi = () => {
+    const on = prim.visible;
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    note.hidden = !on;
+  };
+  btn.onclick = () => { prim.visible = !prim.visible; save(prim.visible); syncUi(); prim.req && prim.req(); };
+  (tb && tb.parentNode ? tb.parentNode : document.body).appendChild(btn);
+  document.body.appendChild(note);
+  const place = () => {
+    if (!tb) return;
+    const r = tb.getBoundingClientRect();
+    btn.style.top = r.top + "px";
+    btn.style.left = (r.right + 8) + "px";
+    btn.style.height = r.height + "px";
+  };
+  addEventListener("resize", place);
+  new MutationObserver(place).observe(tb || document.body, { attributes: true, attributeFilter: ["class", "style"] });
+  place();
+  requestAnimationFrame(place);
+  setTimeout(place, 300);
+  syncUi();
 })();
 </script>
 </body>

@@ -22,3 +22,10 @@ Stop publishing: `systemctl --user disable --now mychart-publish.timer`
 - **แกว่ง**: everything else
 Shown by `theme/findmy.js`/`findmy.css` under the price bar (re-applied by `theme/apply_findmy.py`). Describes the past, not a forecast.
 Revert: `git checkout pre-regime-20261116 -- publish.py theme site README.md && git rm regime.py && python3 theme/apply_findmy.py`
+
+## Trendlines with Breaks (v8, 2026-11-19)
+Client-side overlay of LuxAlgo *Trendlines with Breaks* (Pine v5, © LuxAlgo, [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)) on the main chart, for every timeframe the page loads (currently M1 and M15).
+- Logic in `theme/luxtl.js` matches the Python port in `~/dd/luxtl` (`node theme/test_luxtl.js` vs `theme/luxtl_fixture.json`).
+- Settings: length=14, slope = ATR(14)/14. Lines are the **real-time** values (no backpaint, so they do not repaint). A faint dashed stub marks the confirmed pivot once it is 14 bars old. A dashed extension continues the current lines to the right. Teal "B" under the bar = close broke the down-trendline up; red "B" above = close broke the up-trendline down.
+- Toggle labelled "เส้น" (on by default, remembered in `localStorage`). Attribution footnote on the chart.
+Drawn by `theme/findmy.js` / `findmy.css` (re-applied by `theme/apply_findmy.py`).

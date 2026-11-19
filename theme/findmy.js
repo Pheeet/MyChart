@@ -93,3 +93,184 @@
   el.addEventListener("click", () => el.classList.toggle("open"));
   tick(); setInterval(tick, 60000);
 })();
+
+// ===== v8 (2026-11-19): LuxAlgo Trendlines with Breaks, real-time (no backpaint), on the main chart =====
+(() => {
+  if (typeof series === "undefined" || typeof chart === "undefined" || typeof LuxTL === "undefined") return;
+
+  const KEY = "mychart-tl";
+  const CREDIT = "Trendlines with Breaks © LuxAlgo · CC BY-NC-SA 4.0";
+  const shown = () => { try { return localStorage.getItem(KEY) !== "0"; } catch { return true; } };
+  const save = (on) => { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch {} };
+
+  const prim = {
+    model: { segs: [], faint: [], ext: [], breaks: [] },
+    visible: shown(),
+    series: null, chart: null, req: null,
+    attached(p) { this.chart = p.chart; this.series = p.series; this.req = p.requestUpdate; },
+    detached() { this.chart = this.series = this.req = null; },
+    set(model) { this.model = model || { segs: [], faint: [], ext: [], breaks: [] }; this.req && this.req(); },
+    updateAllViews() {},
+    paneViews() {
+      const self = this;
+      return [
+        { zOrder: () => "normal", renderer: () => ({ draw(target) { self._drawLines(target); } }) },
+        { zOrder: () => "top", renderer: () => ({ draw(target) { self._drawBreaks(target); } }) },
+      ];
+    },
+    _xy(ts, t, p) {
+      const x = ts.timeToCoordinate(t), y = this.series.priceToCoordinate(p);
+      return [x, y];
+    },
+    _stroke(ctx, hr, vr, points, color, width, dash, alpha) {
+      const ts = this.chart.timeScale();
+      const pts = [];
+      for (const q of points) {
+        const [x, y] = this._xy(ts, q.t, q.p);
+        if (x == null || y == null) continue;
+        pts.push([x * hr, y * vr]);
+      }
+      if (pts.length < 2) return;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = Math.max(1, width * hr);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.setLineDash(dash ? dash.map((d) => d * hr) : []);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.stroke();
+      ctx.restore();
+    },
+    _drawLines(target) {
+      if (!this.visible || !this.chart || !this.series) return;
+      target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, horizontalPixelRatio: hr, verticalPixelRatio: vr }) => {
+        const ts = this.chart.timeScale();
+        for (const s of this.model.faint || []) this._stroke(ctx, hr, vr, s.points, s.color, 1, [5, 5], 0.32);
+        for (const s of this.model.segs || []) this._stroke(ctx, hr, vr, s.points, s.color, 1.7, null, 0.95);
+        const mediaW = bitmapSize.width / hr;
+        for (const e of this.model.ext || []) {
+          const [x0, y0] = this._xy(ts, e.t, e.p);
+          if (x0 == null || y0 == null) continue;
+          let barW = 0;
+          if (e.dt) {
+            const x1 = ts.timeToCoordinate(e.t + e.dt);
+            if (x1 != null) barW = x1 - x0;
+          }
+          if (!(barW > 0.2)) barW = 8;
+          const xR = mediaW + 2;
+          if (xR <= x0 + 1) continue;
+          const nBars = (xR - x0) / barW;
+          const pR = e.p + e.slope * nBars;
+          const yR = this.series.priceToCoordinate(pR);
+          if (yR == null) continue;
+          ctx.save();
+          ctx.strokeStyle = e.color;
+          ctx.globalAlpha = 0.8;
+          ctx.lineWidth = Math.max(1, 1.3 * hr);
+          ctx.setLineDash([6 * hr, 5 * hr]);
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(x0 * hr, y0 * vr);
+          ctx.lineTo(xR * hr, yR * vr);
+          ctx.stroke();
+          ctx.restore();
+        }
+      });
+    },
+    _drawBreaks(target) {
+      if (!this.visible || !this.chart || !this.series) return;
+      target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, horizontalPixelRatio: hr, verticalPixelRatio: vr }) => {
+        const ts = this.chart.timeScale();
+        const mediaW = bitmapSize.width / hr, mediaH = bitmapSize.height / vr;
+        ctx.font = `700 ${11 * vr}px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        for (const b of this.model.breaks || []) {
+          const [x, y] = this._xy(ts, b.t, b.p);
+          if (x == null || y == null) continue;
+          if (x < -20 || x > mediaW + 20) continue;
+          const up = b.dir === "up";
+          const tw = ctx.measureText("B").width;
+          const padX = 4.5 * hr, padY = 2.2 * vr;
+          const w = tw + padX * 2, h = 11 * vr + padY * 2;
+          const cx = x * hr;
+          let top = up ? (y * vr + 7 * vr) : (y * vr - 7 * vr - h);
+          let left = cx - w / 2;
+          left = Math.max(2 * hr, Math.min(left, bitmapSize.width - w - 2 * hr));
+          if (top < 2 * vr) top = 2 * vr;
+          if (top + h > bitmapSize.height - 2 * vr) top = bitmapSize.height - h - 2 * vr;
+          const r = 3 * Math.max(hr, vr);
+          ctx.beginPath();
+          const x0 = left, y0 = top, x1 = left + w, y1 = top + h;
+          ctx.moveTo(x0 + r, y0); ctx.lineTo(x1 - r, y0); ctx.quadraticCurveTo(x1, y0, x1, y0 + r);
+          ctx.lineTo(x1, y1 - r); ctx.quadraticCurveTo(x1, y1, x1 - r, y1);
+          ctx.lineTo(x0 + r, y1); ctx.quadraticCurveTo(x0, y1, x0, y1 - r);
+          ctx.lineTo(x0, y0 + r); ctx.quadraticCurveTo(x0, y0, x0 + r, y0);
+          ctx.closePath();
+          ctx.fillStyle = b.color;
+          ctx.fill();
+          ctx.fillStyle = "#fff";
+          ctx.fillText("B", x0 + w / 2, y0 + h / 2 + 0.3 * vr);
+        }
+      });
+    },
+  };
+  series.attachPrimitive(prim);
+
+  let bars = [];
+  const origSet = series.setData.bind(series);
+  const origUpd = series.update.bind(series);
+  function refresh() {
+    prim.set(LuxTL.model(bars));
+  }
+  series.setData = (data) => {
+    bars = Array.isArray(data) ? data.map((b) => ({ time: b.time, high: b.high, low: b.low, close: b.close })) : [];
+    origSet(data);
+    refresh();
+  };
+  series.update = (bar) => {
+    if (bar && bar.time != null) {
+      const last = bars.length ? bars[bars.length - 1] : null;
+      if (last && last.time === bar.time) bars[bars.length - 1] = { time: bar.time, high: bar.high, low: bar.low, close: bar.close };
+      else if (!last || bar.time > last.time) bars.push({ time: bar.time, high: bar.high, low: bar.low, close: bar.close });
+    }
+    origUpd(bar);
+    refresh();
+  };
+
+  const tb = document.querySelector(".toolbar");
+  const btn = document.createElement("button");
+  btn.id = "fm-tl-toggle";
+  btn.type = "button";
+  btn.className = "glass";
+  btn.title = CREDIT + " — เส้นจริง ไม่วาดย้อนหลัง (ป้าย B = ราคาปิดทะลุเส้น)";
+  btn.setAttribute("aria-label", "แสดงหรือซ่อนเส้นแนวโน้ม LuxAlgo");
+  btn.innerHTML = '<span class="fm-tl-swatch" aria-hidden="true"></span><span>เส้น</span>';
+  const note = document.createElement("div");
+  note.id = "fm-tl-note";
+  note.textContent = CREDIT;
+  const syncUi = () => {
+    const on = prim.visible;
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    note.hidden = !on;
+  };
+  btn.onclick = () => { prim.visible = !prim.visible; save(prim.visible); syncUi(); prim.req && prim.req(); };
+  (tb && tb.parentNode ? tb.parentNode : document.body).appendChild(btn);
+  document.body.appendChild(note);
+  const place = () => {
+    if (!tb) return;
+    const r = tb.getBoundingClientRect();
+    btn.style.top = r.top + "px";
+    btn.style.left = (r.right + 8) + "px";
+    btn.style.height = r.height + "px";
+  };
+  addEventListener("resize", place);
+  new MutationObserver(place).observe(tb || document.body, { attributes: true, attributeFilter: ["class", "style"] });
+  place();
+  requestAnimationFrame(place);
+  setTimeout(place, 300);
+  syncUi();
+})();

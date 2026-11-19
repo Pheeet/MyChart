@@ -5,7 +5,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent; SITE = HERE.parent / "site/index.html"
 s = SITE.read_text(encoding="utf-8")
 css = (HERE / "findmy.css").read_text(); js = (HERE / "findmy.js").read_text()
+luxtl = (HERE / "luxtl.js").read_text()
 s = re.sub(r"\n?<style id=\"findmy\">.*?</style>", "", s, flags=re.S)
+s = re.sub(r"\n?<script id=\"luxtl-js\">.*?</script>", "", s, flags=re.S)
 s = re.sub(r"\n?<script id=\"findmy-js\">.*?</script>", "", s, flags=re.S)
 # system font stack instead of web fonts
 s = re.sub(r'<link rel="stylesheet" href="https://fonts.googleapis.com/css2\?family=Space\+Grotesk[^"]*">', "", s)
@@ -18,8 +20,8 @@ s = s.replace('fontFamily: "IBM Plex Mono, monospace", fontSize: 11', 'fontFamil
 s = s.replace('rightPriceScale: { borderColor: C.border },\n  crosshair:', 'rightPriceScale: { borderColor: C.border, scaleMargins: { top: 0.16, bottom: 0.10 } },\n  crosshair:')
 s = s.replace('<meta name="viewport" content="width=device-width, initial-scale=1">', '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<meta name="theme-color" content="#0b0b0d">')
 s = s.replace("</style>\n</head>", "</style>\n<style id=\"findmy\">\n" + css + "</style>\n</head>", 1)
-s = s.replace("</body>", "<script id=\"findmy-js\">\n" + js + "</script>\n</body>", 1)
-assert 'id="findmy"' in s and 'id="findmy-js"' in s
+s = s.replace("</body>", "<script id=\"luxtl-js\">\n" + luxtl + "</script>\n<script id=\"findmy-js\">\n" + js + "</script>\n</body>", 1)
+assert 'id="findmy"' in s and 'id="findmy-js"' in s and 'id="luxtl-js"' in s
 # dialog chart keeps a solid background (transparent canvas looks odd inside the modal)
 s = re.sub(r'(createChart\(\$\("d-chart"\), \{\s*autoSize: true,\s*layout: \{ background: \{ color: )C\.bg', r'\1"#121214"', s, count=1)
 

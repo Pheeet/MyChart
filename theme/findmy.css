@@ -172,3 +172,28 @@ header .brand, header .brand::before, header .avatar, header > .divider { displa
   #fm-regime .rg-nums { font-size: 10.5px; }
 }
 @media (max-width: 380px) { #fm-regime .rg-nums { font-size: 9.5px; } }
+
+/* v8 (2026-11-19): Trendlines with Breaks toggle + attribution footnote */
+#fm-tl-toggle {
+  position: fixed; z-index: 19; top: 80px; padding: 0 12px; border-radius: 10px;
+  font: 600 12px var(--font-display); color: #c7c7cc; letter-spacing: 0;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 7px; box-sizing: border-box;
+}
+#fm-tl-toggle:hover { color: #fff; background: rgba(28,28,30,.78); }
+#fm-tl-toggle[aria-pressed="true"] { color: #fff; }
+#fm-tl-toggle .fm-tl-swatch {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: linear-gradient(180deg, #26A69A 50%, #EF5350 50%);
+  box-shadow: 0 0 0 2px rgba(38,166,154,.18);
+}
+#fm-tl-note {
+  position: fixed; z-index: 18; bottom: 18px; right: 64px;
+  font: 500 10px var(--font-display); color: rgba(174,174,178,.92);
+  pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.65); white-space: nowrap;
+}
+#fm-tl-note[hidden] { display: none; }
+@media (max-width: 1023px) {
+  #fm-tl-toggle { top: 66px; }
+  #fm-tl-note { bottom: auto; top: 104px; right: 10px; left: auto; font-size: 9px; max-width: 52vw;
+    white-space: normal; text-align: right; }
+}
